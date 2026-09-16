@@ -85,6 +85,15 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    without another planner call after the initial fixture calculation. Local reuse
    measured 37–38 ms, not voice latency. General step compilation and paid/spoken
    acceptance are still pending. Docs and a repeatable preview script are included.
+   **Validation-driven repair:** new pure-function builds get one normally budgeted
+   code-only correction from real checker feedback. Original tests, input values,
+   layout and outcome cannot change; a second failure stops without saving.
+   Host/storage/input failures and existing recipe execution never silently retry.
+   279 offline tests pass, including real sandbox and allowance-gate checks.
+   A native-browser fixture corrected a deliberately wrong planter formula, reused
+   it for fresh values without planning, and rendered paginated assumptions on both
+   surfaces. Fixture decisions are not live model acceptance; paid/spoken repair
+   remains pending. No new API spend or microphone capture in this pass.
 5. **Integration/polish** — pending: expectation-setting, timer language gaps,
    wake calibration, microphone/speaker replay, restart/reuse verification.
 

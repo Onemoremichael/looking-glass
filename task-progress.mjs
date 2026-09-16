@@ -9,5 +9,5 @@ export function trackTaskProgress({send,isCurrent,lastSpeech=()=>0,now=Date.now,
   const initial=setTimeout(()=>emit(false),1800),delay=setTimeout(()=>emit(true),10000);
   const stop=()=>{closed=true;clearTimeout(initial);clearTimeout(delay);signal?.removeEventListener('abort',stop);};
   signal?.addEventListener('abort',stop,{once:true});
-  return {update:value=>{if(['checking_data','planning','presenting'].includes(value.stage))stage=value.stage;},stop};
+  return {update:value=>{if(['checking_data','planning','presenting','testing_function','repairing_function'].includes(value.stage))stage=value.stage;},stop};
 }

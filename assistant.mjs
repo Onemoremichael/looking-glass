@@ -7,6 +7,7 @@ import {gameIntent} from './playroom.mjs';
 import {imageIntent} from './image-studio.mjs';
 import {workflowIntent} from './workflows.mjs';
 import {analyzeFunctionReuse} from './function-reuse.mjs';
+import {canRepairFunction,functionRepairContext,validateFunctionRepair} from './function-repair.mjs';
 export class Assistant {
   constructor({session,planner,surfaces,telemetry,weather,studio}){Object.assign(this,{session,planner,surfaces,telemetry,weather,studio});this.inflight=new Map();}
   execute(id,utterance,{signal,trace,onProgress=()=>{},beforeCommit=async()=>{},workflowContext=null,guardDecision=()=>{}}={}) {
@@ -123,8 +124,26 @@ export class Assistant {
       }
       if(decision.actions.some(a=>['create_function','run_function','open_function','function_page'].includes(a.action))){
         if(decision.actions.length!==1||!this.functions)throw Error('Use one available function operation at a time');
-        onProgress({stage:'checking_data'});
-        const result=await this.functions.handle(id,decision.actions[0],{revision,utterance,signal});
+        onProgress({stage:'testing_function'});
+        const original=structuredClone(decision.actions[0]);
+        let result;
+        try{result=await this.functions.handle(id,original,{revision,utterance,signal});}
+        catch(error){
+          if(!canRepairFunction(original,error)||signal?.aborted)throw error;
+          // No paid repair if a spoken correction/navigation superseded the build.
+          await beforeCommit();
+          if(signal?.aborted||this.session.state.revision!==revision)throw Error('Function request changed before repair');
+          onProgress({stage:'repairing_function'});
+          span?.event('function.repair',{repair_state:'started',check:error.diagnostic.check});
+          const repairedDecision=validateDecision(await this.planner.decide(functionRepairContext(original,error),{signal,trace:span}));
+          const repaired=validateFunctionRepair(original,repairedDecision);
+          guardDecision(repairedDecision);await beforeCommit();
+          if(signal?.aborted)throw Error('Function request cancelled');
+          onProgress({stage:'testing_function'});
+          // Exactly one attempt. Failure here propagates without another call.
+          result=await this.functions.handle(id,repaired,{revision,utterance,signal});
+          span?.event('function.repair',{repair_state:'verified'});
+        }
         span?.end({outcome:result.status,action:'assistant'});return result;
       }
       if(decision.actions.some(a=>['generate_image','cancel_image'].includes(a.action))){

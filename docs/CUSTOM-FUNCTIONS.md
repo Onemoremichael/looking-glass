@@ -62,6 +62,34 @@ needs to deliver the request to the assistant; this does not eliminate wake,
 transcription, delegation or spoken-response latency. `function.reuse` traces
 report local duration and route source without exporting input values or text.
 
+## Validation-driven repair
+
+A newly generated `create_function` can receive **one** additional planning turn
+after a trusted sandbox, output-contract or example-test failure. The model gets
+the original action and a small checker diagnostic, not the surrounding unrelated
+conversation. An example mismatch includes the validated example output; sandbox
+failures do not expose host errors or invent an explanation.
+
+Only the code may change. Inputs, current input values, title, outcome, layout,
+parent recipe and every expected example remain identical. Extra actions, weakened
+tests and unchanged code are rejected. The repaired result must pass the same
+sandbox, output, repeatability and persistence gates before any recipe or display
+is committed. A second failure ends the attempt without another model call.
+
+Passing first attempts incur no repair call. Existing saved recipe failures,
+invalid input/specifications, host/worker timeouts, storage errors and cancellation
+do not trigger repair. Revision and correction checks prevent superseded builds
+from committing. Repair has no web tools or shell environment and consumes a normal
+Agents reservation; an exhausted allowance blocks it before a provider call.
+Progress reports testing/repairing rather than claiming success. Metadata-only
+`function.repair` traces record started/verified and the checker category, not
+code, inputs, examples or outputs.
+
+This repairs implementation errors, not incorrect requirements. Model-authored
+tests are still **not independent correctness proof**. If the original tests or
+contract are wrong, they need a separate reasoned revision, not a weakened repair.
+General integration code and unbounded self-repair remain unsupported.
+
 ## Boundaries
 
 - Generated code runs in QuickJS WebAssembly, never Node `eval` or `vm`. The
@@ -118,3 +146,23 @@ node scripts/preview-functions.mjs 'Pack snacks for nine people' 'What about twe
 
 The fixture rejects planner fallback, so success proves local routing rather than
 an unseen inference call. The production state is not used or modified.
+
+### Repair pass — September 16, 2026
+
+- `npm test`: **279 passing tests**, including 14 repair tests. These exercise the
+  real QuickJS checker, fixed-contract enforcement, one-attempt limit, storage
+  rollback, cancellation/revision changes, telemetry privacy, and the real budget
+  gate with a mocked provider. No paid inference is hidden inside these tests.
+- `node scripts/preview-function-repair.mjs` serves an isolated in-memory rehearsal
+  on port 8784. A fixture model first supplies an incorrect soil-volume formula,
+  then corrects it from real checker feedback. Exactly two fixture planning calls
+  produce a saved result; fresh numeric values reuse it without more planning.
+- Native-browser verification: the initial reused result showed 78.5 liters / four
+  bags; changing diameter/depth to 40/30 cm rendered 37.7 liters / two bags.
+  Companion paging also updated the mirror display to the assumptions note.
+  This is browser rendering evidence, not a new physical-mirror acceptance test.
+- The fixture measured 34 ms for local reuse on the development Mac, not voice
+  latency. Verified numeric requests beginning with “estimate” now promote bounded
+  parameter routes too; negated requests still fall back rather than executing.
+- Live model-authored repair and spoken end-to-end acceptance remain pending.
+  No new paid API calls, microphone capture or allowance increase in this pass.

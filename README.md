@@ -77,6 +77,10 @@ connection still shows a stale-data warning.
   require execution receipts. No network, filesystem, or device access. Offline
   execution and companion controls are verified; live model generation is not.
   See [custom functions and limitations](docs/CUSTOM-FUNCTIONS.md).
+- New calculations get one validation-driven code repair when sandbox execution,
+  output bindings or example checks fail. The original inputs, layout and tests
+  cannot change; only passing results save. The extra planning turn uses the
+  normal API allowance, and cancellation or a second failure stops the build.
 - Conversational function reuse: successful numeric requests teach bounded
   parameter slots; saved calculations can run again with new values locally.
   Active-function follow-ups and one-question-at-a-time input collection avoid

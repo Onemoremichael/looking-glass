@@ -12,6 +12,8 @@ const enums = {
   wake_phase:['off','starting','standby','connecting','conversation','cooldown'],
   wake_reason:['user','shutdown','spoken_disable','detector_error','mirror_disconnected','startup_failed','arming_expired','audio_or_detector_stalled','voice_ended_unexpectedly','wake_limit','game_finished'],
   wrap_state:['started','drained','timeout'],
+  repair_state:['started','verified'],
+  check:['runtime_rejected','output_contract','example_mismatch'],
   outcome:['ok','error','cancelled','superseded','needs_input','completed','unconfirmed'],
   action:['start_timer','cancel_timer','add_todo','show','get_weather','compose_weather','open_weather_view','resolve_view_offer','unsupported','assistant'],
   source:['builtin','learned'],
@@ -49,7 +51,7 @@ export function exportConfig(env={}) {
   return {url:url.toString(),headers,timeoutMillis:2000};
 }
 const names=new Set(['function.reuse','function.execute','workflow.run','workflow.step_reuse','image.generate','wake.state','voice.session','voice.startup','voice.delegation','voice.tool','voice.timer_fast','voice.close','agent.decision','agent.planning','agent.cleanup','agent.recovery']);
-const eventNames=new Set(['phase','duplicate','watchdog','transport.error','usage','superseded','heartbeat.ready','playback.detected','waiting.acknowledgment','timer.delegation_reconciled','timer.fast_fallback','quick_action.promoted','game.wrapup']);
+const eventNames=new Set(['phase','duplicate','watchdog','transport.error','usage','superseded','heartbeat.ready','playback.detected','waiting.acknowledgment','timer.delegation_reconciled','timer.fast_fallback','quick_action.promoted','game.wrapup','function.repair']);
 export class Telemetry {
   constructor({file,env={},exporter,now=Date.now,maxBytes=2*1024*1024}={}) {
     this.file=file;this.now=now;this.maxBytes=maxBytes;this.records=[];this.failures=0;this.exportFailures=0;

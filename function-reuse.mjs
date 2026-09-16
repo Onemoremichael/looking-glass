@@ -43,7 +43,7 @@ function tokens(text){
 export function functionFingerprint(spec){return createHash('sha256').update(JSON.stringify(spec)).digest('hex');}
 export function promoteFunctionRoute(state,view,input,utterance,now){
   if(!view.spec.inputs.length||view.spec.inputs.some(i=>i.type!=='number'))return false;
-  const t=tokens(utterance);if(!t||t.length>40||t.filter(x=>typeof x==='string').length<3||! /^(calculate|pack|plan|make|how|what|run|use|show)\b/.test(normalized(utterance)))return false;
+  const t=tokens(utterance);if(!t||t.length>40||t.filter(x=>typeof x==='string').length<3||! /^(calculate|estimate|pack|plan|make|how|what|run|use|show)\b/.test(normalized(utterance)))return false;
   const numbers=t.filter(x=>typeof x==='number'),names=view.spec.inputs.map(i=>i.name);
   if(numbers.length!==names.length||new Set(numbers).size!==names.length||names.some(n=>!numbers.includes(input[n])))return false;
   const parts=t.map(x=>typeof x==='number'?{slot:names.find(n=>input[n]===x)}:{literal:x});
