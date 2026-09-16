@@ -47,7 +47,7 @@ export function exportConfig(env={}) {
   if(url.username||url.password||url.search||url.hash||!(url.protocol==='https:'||(url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname))))throw Error('Telemetry endpoint must use HTTPS or loopback HTTP, without URL credentials');
   return {url:url.toString(),headers,timeoutMillis:2000};
 }
-const names=new Set(['workflow.run','image.generate','wake.state','voice.session','voice.startup','voice.delegation','voice.tool','voice.timer_fast','voice.close','agent.decision','agent.planning','agent.cleanup','agent.recovery']);
+const names=new Set(['function.execute','workflow.run','image.generate','wake.state','voice.session','voice.startup','voice.delegation','voice.tool','voice.timer_fast','voice.close','agent.decision','agent.planning','agent.cleanup','agent.recovery']);
 const eventNames=new Set(['phase','duplicate','watchdog','transport.error','usage','superseded','heartbeat.ready','playback.detected','waiting.acknowledgment','timer.delegation_reconciled','timer.fast_fallback','quick_action.promoted']);
 export class Telemetry {
   constructor({file,env={},exporter,now=Date.now,maxBytes=2*1024*1024}={}) {

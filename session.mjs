@@ -7,6 +7,7 @@ import {validateResearchSpec,validateResearchBoard,researchBoardSchema,RESEARCH_
 import {promoteQuickAction} from './quick-actions.mjs';
 import {emptyWeather,weatherSummary,weatherView} from './weather.mjs';
 import {validateWorkflowSpec} from './workflows.mjs';
+import {validateFunctionSpec} from './custom-functions.mjs';
 import {validateWeatherSpec,composeWeather,compositionSummary,refreshComposition,viewOfferCurrent} from './weather-composition.mjs';
 import {ReusableViews,weatherViewIndex} from './reusable-views.mjs';
 
@@ -25,7 +26,7 @@ function text(value, max = 300) {
 export class Session {
   constructor({ onChange = () => {}, file, now = Date.now, learnQuickActions=process.env.OPENAI_LEARNED_FAST_PATH!=='0' } = {}) {
     this.onChange = onChange; this.file = file; this.now = now; this.learnQuickActions=learnQuickActions;
-    this.repertoire=new ReusableViews({weather:validateWeatherSpec,research:validateResearchSpec,workflow:validateWorkflowSpec});
+    this.repertoire=new ReusableViews({weather:validateWeatherSpec,research:validateResearchSpec,workflow:validateWorkflowSpec,function:validateFunctionSpec});
     this.state = { version: 1, revision: 0, panel: 'home', message: 'What would you like to do?', timers: [], todos: [], tasks: [], recipes: [], weatherViews:[],viewOffer:null,weather:emptyWeather(), catalog };
     if (file) {
       try {
@@ -217,7 +218,7 @@ export class Session {
       s.weather.view=args.period;s.weather.composition=null;s.viewOffer=null;s.panel='weather';return;
     }
     if (action === 'show') {
-      if (!['home','time','timers','todos','weather','research','studio','workflows','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
+      if (!['home','time','timers','todos','weather','research','studio','workflows','functions','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
       s.viewOffer=null;s.panel = args.panel;if(args.panel==='workflows')s.message='';return;
     }
     if (action === 'start_timer') {

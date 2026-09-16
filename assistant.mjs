@@ -6,6 +6,7 @@ import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {gameIntent} from './playroom.mjs';
 import {imageIntent} from './image-studio.mjs';
 import {workflowIntent} from './workflows.mjs';
+import {functionIntent} from './custom-functions.mjs';
 export class Assistant {
   constructor({session,planner,surfaces,telemetry,weather,studio}){Object.assign(this,{session,planner,surfaces,telemetry,weather,studio});this.inflight=new Map();}
   execute(id,utterance,{signal,trace,onProgress=()=>{},beforeCommit=async()=>{},workflowContext=null,guardDecision=()=>{}}={}) {
@@ -22,7 +23,7 @@ export class Assistant {
       return this.session.commitDecision(id,revision,{status:'execute',outcome:'Continue game',message:'Game answer',actions:[action],options:[],selectedOptionId:null},'');
     }
     let researchRequest=null;
-    let quick=(!workflowContext&&this.workflows?workflowIntent(utterance,this.session.state):null)||imageIntent(utterance,this.session.state)||researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
+    let quick=(!workflowContext&&this.workflows?workflowIntent(utterance,this.session.state):null)||(this.functions?functionIntent(utterance,this.session.state):null)||imageIntent(utterance,this.session.state)||researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
     if(quick?.action==='open_research_view'){
       const cached=this.session.state.researchCache?.find(b=>b.savedId===quick.viewId);
       if(quick.refresh||!cached||this.session.now()-cached.fetchedAt>=RESEARCH_FRESH_MS){
@@ -34,6 +35,7 @@ export class Assistant {
       await beforeCommit();
       if(signal?.aborted)throw Error('Request cancelled');
       guardDecision({status:'execute',actions:[quick]});
+      if(['open_function','function_page'].includes(quick.action))return this.functions.handle(id,quick,{revision,utterance,signal});
       if(quick.action.endsWith('_workflow'))return this.workflows.handle(id,quick,{revision,utterance});
       return this.session.commitDecision(id,revision,{status:'execute',outcome:'Use a saved view',message:'Requested',actions:[quick],options:[],selectedOptionId:null},utterance);
     }
@@ -72,7 +74,8 @@ export class Assistant {
         reusableViews:state.reusableViews||[],researchRequest,research:state.research||null,
         imageJobs:state.imageJobs||[],imageStudio:{available:!!this.studio,asynchronous:true,autoSave:true,editsSupported:false},
         researchCache:(state.researchCache||[]).map(b=>({viewId:b.savedId,fresh:this.session.now()-b.fetchedAt<RESEARCH_FRESH_MS})),
-        durability:{autoSave:true,supportedKinds:['weather','research','workflow'],stores:'validated configuration, not data or action replays'},
+        customFunctions:{available:!!this.functions,pureOnly:true,testsRequired:true,localReuse:true,noNetworkOrDeviceAccess:true},
+        durability:{autoSave:true,supportedKinds:['weather','research','workflow','function'],stores:'validated configuration, not data or action replays'},
         presentation:view,surfaces:reports,history:state.assistantHistory||[],resolvedSelection,
       }),(key,value)=>typeof value==='string'&&reverse.has(value)?reverse.get(value):value);
       const decision=validateDecision(await this.planner.decide({
@@ -101,6 +104,12 @@ export class Assistant {
         if(decision.actions.length!==1||!this.workflows)throw Error('Use one workflow operation at a time');
         const result=this.workflows.handle(id,decision.actions[0],{revision,utterance,resolvedSelection});
         span?.end({outcome:'completed',action:'assistant'});return result;
+      }
+      if(decision.actions.some(a=>['create_function','run_function','open_function','function_page'].includes(a.action))){
+        if(decision.actions.length!==1||!this.functions)throw Error('Use one available function operation at a time');
+        onProgress({stage:'checking_data'});
+        const result=await this.functions.handle(id,decision.actions[0],{revision,utterance,signal});
+        span?.end({outcome:result.status,action:'assistant'});return result;
       }
       if(decision.actions.some(a=>['generate_image','cancel_image'].includes(a.action))){
         if(decision.actions.length!==1||!this.studio)throw Error('Use one image operation at a time');
