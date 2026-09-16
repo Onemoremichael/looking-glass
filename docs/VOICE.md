@@ -1,11 +1,13 @@
-# Mac voice assistant
+# Voice assistant
 
 ## Product and hardware boundaries
 
-Use the Mac microphone and speakers now. Eventually the Mirror should capture/play
-audio while the Mac hosts application logic. Audio remains separate from rendering.
+Choose Mac browser audio or the native USB Mirror audio bridge while the Mac hosts
+application logic. See [Mirror setup and validation](MIRROR-AUDIO.md).
+Audio remains separate from rendering.
 Android 6.0.1 is the current baseline; Android 7 is a possible later mirror-mirror
-investigation, not a prerequisite. This pass makes no device or firmware changes.
+investigation, not a prerequisite. Native audio requires an Afterglow APK update
+and microphone permission, but no firmware changes.
 
 The mirror is output-only: clock, selected content, persistent timers and shared
 assistant cards on black. No branding, text input or touch controls. The Mac companion
@@ -15,13 +17,13 @@ Start Conversation is listening-first: no greeting, tutorial, capability recital
 unsolicited question. `prompts/live-instructions.mjs` contains the policy. Prompt and
 transport tests cannot guarantee audio-level model behavior; human checks still matter.
 
-For a delegated request still pending after 1.5 seconds of backend work (after the
-900 ms quiet window), send one factual interim commentary update. Live is instructed
-to acknowledge briefly (“Give me a sec”), then wait for the actual result. No startup
-filler, repeated narration, ETA or early success claim. Completion/correction/stop
-clears the pending cue; the same delegation is acknowledged at most once. If Live
-has already produced output since this request, suppress the app's extra waiting
-cue (a conservative output heuristic, not semantic recognition of acknowledgments). Official
+For delegated work, the shared progress tracker can send factual stage context at
+1.8 seconds and a delayed-work update at 10 seconds. Suppress a cue within 2.5 seconds
+of existing assistant speech, rather than suppressing all later updates after a
+single acknowledgment. Live chooses warm, concise wording suited to the actual state.
+No startup filler, repeated narration, invented ETA, premature success, unsupported
+“first time” story, or guaranteed speedup. Completion/correction/stop clears timers.
+See [adaptive views](ADAPTIVE-VIEWS.md) for rendering and explicit save consent. Official
 [Live delegation guidance](https://developers.openai.com/api/docs/guides/live-delegation)
 supports separate progress and result commentary; append acceptance is not proof
 the requested words were played. The new cue has deterministic tests, not yet a
@@ -251,3 +253,34 @@ Regression checks (99 automated tests across the repository pass as of September
 No paid API validation was run for the new nomination field in this pass. Its schema,
 commit/persistence behavior, recorded cancellation flow, and learned reuse are tested
 locally; the model's nomination behavior still needs a human or paid synthetic run.
+
+## Interruption recovery (September 16)
+
+The failed “what about next week” test exposed a lifecycle bug, not missing weather
+data: a new transcript fragment cancelled planning, cleanup was unconfirmed, and the
+budget guard then blocked all later planner calls. The voice reply incorrectly
+suggested a changed display or repeating the request.
+
+New speech now holds the application's commit immediately. After 900 ms of quiet,
+a narrow neutral acknowledgment (e.g. “okay” or “thank you”) resumes the same work;
+a meaningful follow-up replaces it once, preserving the original request plus the
+refinement. Explicit “stop” cancels without replacement. Repeated Live handoffs
+update the reply destination rather than starting another plan. This is not an
+attempt to identify all background speech or to steer an already-running cloud turn.
+The commit gate prevents an old decision from applying while a correction is pending.
+
+Cleanup uses independent, bounded lifecycle requests. Before another paid decision,
+the planner reconciles saved **unconfirmed** session IDs with the provider and retries
+deletion, not inference. Only successful deletion or a 404 settles the blocker; an
+idle observation alone does not. The entire original $0.50 allowance remains charged
+conservatively. Unknown session IDs, fresh pending owners and failed remote cleanup
+remain blocked. Repeated failed recovery is throttled for 30 seconds per process.
+`agent.recovery` traces distinguish recovery from new `agent.planning` work; typed
+failure messages explain blocked planning or exhausted allowance without a retry loop.
+
+Deterministic coverage includes lost delete replies, restart recovery, still-active
+sessions, abort during recovery, backchannels, duplicate handoffs, settled refinements,
+commit races, explicit cancellation and accurate failure replies. `npm test` runs
+these without paid API calls.
+
+Lifecycle implementation follows the [official session-management documentation](https://developers.openai.com/api/docs/guides/agents-api/sessions/manage).

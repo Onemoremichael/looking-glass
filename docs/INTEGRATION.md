@@ -54,7 +54,8 @@ automations or operating-system alarms.
 The existing Afterglow WebView wrapper successfully renders Looking Glass in
 1080×1920 portrait on the recovered Android 6.0.1 device. A temporary timer was
 created, visually verified on the device, and removed. No APK or firmware was flashed.
-This is display verification; microphone and spoken responses still use the Mac.
+This was display-only verification. The September 16 [native audio bridge](MIRROR-AUDIO.md)
+adds opt-in Mirror capture/playback independently of WebView rendering.
 
 With the local server running and authorized USB connected:
 

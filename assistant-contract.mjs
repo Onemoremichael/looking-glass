@@ -1,14 +1,20 @@
 import {quickActionSchema} from './quick-actions.mjs';
 import {weatherView} from './weather.mjs';
+import {weatherComponents,weatherRanges} from './weather-composition.mjs';
 export const capabilities = {
-  available: ['get_time','get_weather','show','start_timer','cancel_timer','add_todo','set_todo_done','remove_todo'],
+  available: ['get_time','get_weather','compose_weather','open_weather_view','save_current_view','resolve_view_offer','show','start_timer','cancel_timer','add_todo','set_todo_done','remove_todo'],
   limitations: ['Timer alerts are visual only; no audible alarms.', 'Weather is Open-Meteo model data for saved locations only; no radar, severe-weather alerts, or automatic IP location. Set up places/units in companion.', 'No calendar account, web research, music, camera, purchases, messages or research jobs are connected.', 'Home/back returns home, not navigation history.', 'Only the first five to-dos are shown on the mirror; the companion shows all items.'],
 };
 const str = (maxLength=300) => ({type:'string',minLength:1,maxLength});
 const obj = properties => ({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
+export const weatherSpecSchema=obj({title:str(60),range:{enum:weatherRanges},startDate:{anyOf:[{type:'null'},str(10)]},endDate:{anyOf:[{type:'null'},str(10)]},focus:{enum:['general','rain','temperature']},components:{type:'array',items:{enum:weatherComponents},maxItems:3}});
 export const actionSchema = {anyOf:[
   obj({action:{enum:['get_time']}}),
   obj({action:{enum:['get_weather']},period:{enum:['now','today','tomorrow','week']},locationId:{anyOf:[{type:'null'},str(100)]}}),
+  obj({action:{enum:['compose_weather']},locationId:{anyOf:[{type:'null'},str(100)]},spec:weatherSpecSchema}),
+  obj({action:{enum:['open_weather_view']},viewId:str(100)}),
+  obj({action:{enum:['resolve_view_offer']},offerId:str(100),choice:{enum:['save','discard']}}),
+  obj({action:{enum:['save_current_view']}}),
   obj({action:{enum:['show']},panel:{enum:['home','time','timers','todos','weather','calendar','tasks','saved']}}),
   obj({action:{enum:['start_timer']},seconds:{type:'integer',minimum:1,maximum:86400},label:str(80)}),
   obj({action:{enum:['cancel_timer','remove_todo']},id:str(100)}),
@@ -49,22 +55,33 @@ export function presentation(state,now=Date.now()) {
     revision:state.revision, panel:state.panel,
     assistantCard:state.assistant&&state.assistant.status!=='execute'?{status:state.assistant.status,message:state.assistant.message,options:state.assistant.options}:null,
     mirror:{panel:state.panel,todos:state.panel==='todos'?state.todos.slice(0,5):[],timers:state.timers,clock:true,
-      tasks:state.panel==='tasks'?state.tasks.slice(0,3):[],recipes:state.panel==='saved'?state.recipes.slice(0,3):[]},
+      tasks:state.panel==='tasks'?state.tasks.slice(0,3):[],recipes:state.panel==='saved'?state.recipes.slice(0,3):[],weatherViews:state.panel==='saved'?(state.weatherViews||[]).slice(0,3):[]},
     companion:{panel:state.panel,todos:state.panel==='todos'?state.todos:[],timers:state.panel==='timers'?state.timers:[],clock:true,
       tasks:state.panel==='tasks'?state.tasks:[],recipes:state.panel==='saved'?state.recipes:[],
-      homeSummary:state.panel==='home'?{savedViews:state.recipes.length,requests:state.tasks.filter(t=>t.status!=='cancelled').length,backgroundResearch:false}:null},
-    weather:state.panel==='weather'?{...weatherView(state.weather,now),view:state.weather?.view||'now'}:null,
+      weatherViews:state.panel==='saved'?(state.weatherViews||[]):[],homeSummary:state.panel==='home'?{savedViews:state.recipes.length+(state.weatherViews||[]).length,requests:state.tasks.filter(t=>t.status!=='cancelled').length,backgroundResearch:false}:null},
+    weather:state.panel==='weather'?{...weatherView(state.weather,now),view:state.weather?.view||'now',composition:state.weather.composition||null}:null,
+    viewOffer:state.viewOffer||null,weatherViews:state.weatherViews||[],
     disconnectedPlaceholder:state.panel==='calendar'?'calendar':null,
     clarification:state.assistant?.status==='clarify'?state.assistant:null,
   };
 }
 
 export class SurfaceRegistry {
-  constructor(now=Date.now){this.now=now;this.clients=new Map();}
+  constructor(now=Date.now){this.now=now;this.clients=new Map();this.waiters=new Set();}
   report(body,state) {
     if(!body||!['mirror','companion'].includes(body.surface)||typeof body.clientId!=='string'||!/^[a-z0-9-]{1,80}$/i.test(body.clientId)||!Number.isInteger(body.revision)||body.revision<0||body.revision>state.revision||typeof body.visible!=='boolean')throw Error('Invalid surface report');
     this.prune();if(this.clients.size>=40&&!this.clients.has(body.clientId))throw Error('Too many surfaces');
     this.clients.set(body.clientId,{surface:body.surface,revision:body.revision,visible:body.visible,at:this.now()});
+    for(const check of this.waiters)check();
+  }
+  waitForRevision(revision,{signal,timeoutMs=1200}={}){
+    return new Promise(resolve=>{
+      const finish=value=>{clearTimeout(timer);this.waiters.delete(check);signal?.removeEventListener('abort',abort);resolve(value);};
+      const check=()=>{if([...this.clients.values()].some(c=>c.visible&&c.revision>=revision&&this.now()-c.at<15000))finish(true);};
+      const abort=()=>finish(false),timer=setTimeout(()=>finish(false),timeoutMs);
+      this.waiters.add(check);signal?.addEventListener('abort',abort,{once:true});
+      if(signal?.aborted)abort();else check();
+    });
   }
   prune(){for(const [id,v] of this.clients)if(this.now()-v.at>15000)this.clients.delete(id);}
   snapshot(state){this.prune();return [...this.clients.values()].map(v=>({...v,current:v.revision===state.revision}));}

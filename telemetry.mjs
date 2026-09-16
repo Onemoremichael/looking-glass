@@ -10,11 +10,11 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 const enums = {
   phase:['off','connecting','listening','thinking','speaking','muted','needs_input','stopping','error'],
   outcome:['ok','error','cancelled','superseded','needs_input','completed','unconfirmed'],
-  action:['start_timer','cancel_timer','add_todo','show','get_weather','unsupported','assistant'],
+  action:['start_timer','cancel_timer','add_todo','show','get_weather','compose_weather','open_weather_view','resolve_view_offer','unsupported','assistant'],
   source:['builtin','learned'],
-  template:['start_timer','cancel_only_timer','show_panel','get_weather'],
+  template:['start_timer','cancel_only_timer','show_panel','get_weather','weather_view'],
   reason:['user','shutdown','lease_expired','duration_limit','transport_error','startup_error','close_requested','expired','content','remote_hangup','connection_lost','unknown'],
-  error_code:['startup_failed','transport_failed','tool_failed','budget_failed','final_usage_missing','hangup_failed','timer_context_failed','timer_confirmation_failed'],
+  error_code:['startup_failed','transport_failed','tool_failed','budget_failed','final_usage_missing','hangup_failed','timer_context_failed','timer_confirmation_failed','agent_recovery_required','test_budget_exhausted'],
   fallback_reason:['invalid_request','uncertain_language','unrecognized_duration','unsupported_wording','missing_duration','disabled','pending_clarification','state_changed','commit_failed','not_committed','ambiguous_target','stale_surface','not_learned'],
 };
 const numeric = new Set(['duration_ms','seconds','estimated_usd','transcript_chars','fragment_count','quiet_window_ms','since_last_fragment_ms','since_tool_ms','revision','timer_count']);
@@ -45,7 +45,7 @@ export function exportConfig(env={}) {
   if(url.username||url.password||url.search||url.hash||!(url.protocol==='https:'||(url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname))))throw Error('Telemetry endpoint must use HTTPS or loopback HTTP, without URL credentials');
   return {url:url.toString(),headers,timeoutMillis:2000};
 }
-const names=new Set(['voice.session','voice.startup','voice.delegation','voice.tool','voice.timer_fast','voice.close','agent.decision','agent.planning','agent.cleanup']);
+const names=new Set(['voice.session','voice.startup','voice.delegation','voice.tool','voice.timer_fast','voice.close','agent.decision','agent.planning','agent.cleanup','agent.recovery']);
 const eventNames=new Set(['phase','duplicate','watchdog','transport.error','usage','superseded','heartbeat.ready','playback.detected','waiting.acknowledgment','timer.delegation_reconciled','timer.fast_fallback','quick_action.promoted']);
 export class Telemetry {
   constructor({file,env={},exporter,now=Date.now,maxBytes=2*1024*1024}={}) {

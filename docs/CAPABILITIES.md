@@ -45,16 +45,17 @@ the top two-thirds of the upright glass; the bottom third is reflection-only.
 ## The two execution paths
 
 **Familiar operation:** interpret → validate → local tool or cached lookup → update
-the display → return confirmed facts for speech. Execution itself stays local. In the
-current default implementation, interpretation does make an Agents API round trip;
-safe fast-path routing is a future optimization. The opt-in legacy grammar path uses
-local rules. Neither mode implies offline speech recognition.
+the display → return confirmed facts for speech. Eligible timer starts/cancellations,
+navigation, weather lookups, idempotent saving and saved-weather-title recall
+have a context-checked local fast path. Ambiguity and novel requests retain the
+Agents planner. Neither mode implies offline speech recognition.
 
 **Novel request:** clarify → explain scope → start a real job → research/compose →
-verify → deliver → offer to save. Agents API belongs here for research, comparison,
+verify → automatically retain reusable structure → deliver. Agents API belongs here for research, comparison,
 multi-step work, and new capability construction. GPT-Live-1 remains the intended
-conversational frontend. Agents planning exists, but research, durable jobs and new
-capability construction are not enabled. The current planner must explain that limit.
+conversational frontend. Agents planning and bounded weather component composition
+exist; arbitrary code generation, research and durable research jobs are not enabled.
+The current planner must explain that limit.
 
 Measure end-of-speech to first audio, end-of-speech to confirmed UI/action, and
 interruption to stopped playback. Keep connections warm only within an active
@@ -70,7 +71,9 @@ session; do not assume always-on paid sessions or promise unmeasured latency.
 These should reuse adapters and trusted UI components. Start with an agenda,
 event cards, forecast, list, countdown, and status/question components. A model can
 propose a validated UI specification, not execute arbitrary browser JavaScript.
-The generic renderer/schema system is planned; current screens are hand-authored.
+Weather now has a bounded renderer/schema for assembling forecast components around
+the requested dates and focus. Other domains and arbitrary generated components
+remain planned. See [adaptive weather views](ADAPTIVE-VIEWS.md).
 
 ## Persistence and forks
 
@@ -81,8 +84,9 @@ never make a saved view look current merely because it opened quickly.
 
 Built-ins should eventually support preference/layout variants without changing
 their validated execution code. Keep default definitions intact and store overlays.
-Today only configured custom requests can be saved/forked; built-in forking and
-actual recipe execution are not implemented.
+Assembled experiences save by default through the shared reusable-view library. Weather is the first adapter and reopens against
+fresh cached/provider data. Configured research requests can be saved/forked but
+their data sources still are not connected. General built-in forking is not implemented.
 
 “Keep this” saves a capability. It does not authorize recurring work or notification
 permissions. Background refresh requires a separate explicit decision.

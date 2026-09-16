@@ -10,6 +10,7 @@ import { Assistant } from './assistant.mjs';
 import { AgentsPlanner } from './agents-planner.mjs';
 import { ApiBudget } from './api-budget.mjs';
 import {Weather} from './weather.mjs';
+import {MirrorAudio} from './mirror-audio.mjs';
 
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
 const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png' };
@@ -18,7 +19,7 @@ for(const kind of ['cloud','sun','moon','rain','storm','snow','fog']){
   files['/assets/weather/'+kind+'-volume-v1.png']='assets/weather/'+kind+'-volume-v1.png';
 }
 
-export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}, telemetry, assistantOptions,weatherOptions={} } = {}) {
+export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}, telemetry, assistantOptions,weatherOptions={}, mirrorAudio=null } = {}) {
   const clients = new Set();
   const surfaces=new SurfaceRegistry();
   const session = new Session({ ...sessionOptions, onChange: state => {
@@ -27,7 +28,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
   } });
   const weather=new Weather({session,...weatherOptions});weather.start();
   const budgetPath=fileURLToPath(new URL('./data/api-test-budget.json',import.meta.url));
-  const assistant=assistantOptions?new Assistant({session,surfaces,telemetry,planner:assistantOptions.planner||new AgentsPlanner({budget:new ApiBudget(budgetPath),telemetry})}):undefined;
+  const assistant=assistantOptions?new Assistant({session,surfaces,telemetry,weather,planner:assistantOptions.planner||new AgentsPlanner({budget:new ApiBudget(budgetPath),telemetry})}):undefined;
   const voice = new Voice({ session, telemetry, assistant, budgetPath, ...voiceOptions,
     publish: state => { for (const client of clients) client.write(`event: voice\ndata: ${JSON.stringify(state)}\n\n`); } });
   const server = http.createServer(async (req, res) => {
@@ -47,6 +48,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
       }
       if (req.method === 'GET' && path === '/api/state') return json(200, session.state);
       if (req.method === 'GET' && path === '/api/voice') return json(200, voice.state);
+      if(req.method==='GET'&&path==='/api/mirror-audio')return json(200,mirrorAudio?.status()||{connected:false});
       if(req.method==='POST'&&path==='/api/weather'){
         if(req.headers.origin!==localOrigin||!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(403,{error:'Same-origin JSON required'});
         let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>1024)return json(413,{error:'Request too large'});}
@@ -79,10 +81,11 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
         let body; try { body=JSON.parse(raw); } catch { return json(400,{error:'Invalid JSON'}); }
         if (!body || typeof body!=='object') return json(400,{error:'Invalid body'});
         if (path==='/api/voice/start') {
-          try { return json(201,await voice.start(body.sdp)); }
+          try { if(body.device==='mirror'&&!mirrorAudio)throw Error('Mirror audio is unavailable');return json(201,await voice.start(body.sdp,body.device==='mirror'?mirrorAudio:null)); }
           catch (e) { return json(409,{error:e.message}); }
         }
         if (!voice.active || body.token!==voice.active.token) return json(409,{error:'No matching active session'});
+        if(path==='/api/voice/mute'&&voice.active.mirror){voice.active.mirror.mute(!!body.muted);return json(200,{ok:true});}
         if (path==='/api/voice/heartbeat') return json(200,{ok:voice.heartbeat(body.token,body)});
         if (path==='/api/voice/stop') { await voice.stop(body.token); return json(200,voice.state); }
         return json(404,{error:'Unknown voice operation'});
@@ -111,7 +114,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
   });
   return { server, session, voice, weather, close: async () => {
     try { await weather.close();await voice.stop(undefined,'shutdown'); await assistant?.planner.drain?.(); }
-    finally { session.close(); for (const client of clients) client.end(); server.close(); await telemetry?.close(); }
+    finally { mirrorAudio?.close();session.close(); for (const client of clients) client.end(); server.close(); await telemetry?.close(); }
   } };
 }
 
@@ -122,7 +125,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const host = process.env.HOST || '127.0.0.1';
   const origins = [`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...(process.env.LAN_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)];
   const telemetry=new Telemetry({file:fileURLToPath(new URL('./data/telemetry/events.jsonl',import.meta.url)),env:process.env});
-  const app = createApp({ origins, telemetry, assistantOptions:process.env.OPENAI_AGENT_ENABLED==='0'?undefined:{}, sessionOptions: { file: fileURLToPath(new URL('./data/state.json', import.meta.url)) } });
+  const mirrorAudio=new MirrorAudio();await mirrorAudio.listen(Number(process.env.MIRROR_AUDIO_PORT||8782));
+  const app = createApp({ origins, telemetry, mirrorAudio, assistantOptions:process.env.OPENAI_AGENT_ENABLED==='0'?undefined:{}, sessionOptions: { file: fileURLToPath(new URL('./data/state.json', import.meta.url)) } });
   app.server.listen(port, host, () => console.log(`Looking Glass: http://localhost:${port}/\nRemote: http://localhost:${port}/remote\nVoice starts only from the Mac companion. Camera off. Bound to ${host}.`));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => app.close());
 }

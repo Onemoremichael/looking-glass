@@ -10,6 +10,8 @@ import { ApiBudget } from '../api-budget.mjs';
 import { Voice } from '../voice.mjs';
 import { createApp } from '../server.mjs';
 import { Telemetry } from '../telemetry.mjs';
+import {Assistant} from '../assistant.mjs';
+import {recoveryError} from '../agent-recovery.mjs';
 
 function fixture(t) {
   const dir=mkdtempSync(join(tmpdir(),'glass-voice-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
@@ -108,10 +110,10 @@ test('async planner is cancelled on correction and terminal session closure; lat
   ws.emit('event',{type:'session.delegation.created',event_id:'d1',delegation:{id:'d1',target:'client'}});
   t.mock.timers.tick(900);assert.equal(jobs.length,1);
   ws.emit('event',{type:'session.input_transcript.delta',event_id:'u2',delta:', actually three minutes'});
-  assert.equal(jobs[0].signal.aborted,true);
+  assert.equal(jobs[0].signal.aborted,false); // Held immediately; cancel only settled corrections.
   jobs[0].resolve({status:'completed',message:'Wrong late reply'});await Promise.resolve();
   assert.equal(ws.sent.length,0);
-  t.mock.timers.tick(900);assert.equal(jobs.length,2);assert.match(jobs[1].text,/actually three/);
+  t.mock.timers.tick(900);assert.equal(jobs[0].signal.aborted,true);assert.equal(jobs.length,2);assert.match(jobs[1].text,/actually three/);
   ws.emit('event',{type:'session.closed',usage:{seconds:3}});
   assert.equal(jobs[1].signal.aborted,true);
   jobs[1].resolve({status:'completed',message:'Another late reply'});await Promise.resolve();
@@ -130,6 +132,50 @@ function delegate(ws,suffix='1'){
 }
 function input(ws,text,start=0){ws.emit('event',{type:'session.input_transcript.delta',delta:text,start_ms:start,end_ms:start+100});}
 function handoff(ws,id,offset){ws.emit('event',{type:'session.delegation.created',offset_ms:offset,delegation:{id,target:'client'}});}
+const flush=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
+test('backchannel holds a ready decision, resumes same work, and follows latest delegation',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
+  const c=await controlled(t);t.after(()=>c.voice.stop());let finish,calls=0;
+  c.voice.assistant=new Assistant({session:c.voice.session,planner:{decide:()=>{calls++;return new Promise(r=>finish=r);}}});
+  delegate(c.ws);t.mock.timers.tick(900);
+  input(c.ws,'okay');handoff(c.ws,'d2');
+  finish({status:'execute',outcome:'Add milk',message:'Done',actions:[{action:'add_todo',text:'milk'}],options:[],selectedOptionId:null});
+  await flush();assert.equal(c.voice.session.state.todos.length,0);
+  t.mock.timers.tick(900);await flush();
+  assert.equal(calls,1);assert.equal(c.voice.session.state.todos.length,1);
+  assert.equal(c.ws.sent.at(-1).delegation_id,'d2');assert.equal(c.voice.active.cursor,2);
+});
+test('settled refinement keeps original outcome, prevents stale commit, and runs once',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
+  const c=await controlled(t);t.after(()=>c.voice.stop());const jobs=[];
+  c.voice.assistant=new Assistant({session:c.voice.session,planner:{decide:(ctx,opts)=>new Promise(resolve=>jobs.push({ctx,opts,resolve}))}});
+  input(c.ws,'What about next week?');handoff(c.ws,'first');t.mock.timers.tick(900);
+  input(c.ws,'War');handoff(c.ws,'second');t.mock.timers.tick(400);input(c.ws,'mer');
+  assert.equal(jobs[0].opts.signal.aborted,false);
+  jobs[0].resolve({status:'execute',outcome:'Old decision',message:'Stale',actions:[{action:'add_todo',text:'stale'}],options:[],selectedOptionId:null});
+  await flush();assert.equal(c.voice.session.state.todos.length,0);
+  t.mock.timers.tick(900);await flush();
+  assert.equal(jobs.length,2);assert.equal(jobs[0].opts.signal.aborted,true);
+  assert.match(jobs[1].ctx.utterance,/What about next week\?[\s\S]*User follow-up: Warmer/);
+  jobs[1].resolve({status:'execute',outcome:'New decision',message:'Fresh',actions:[{action:'add_todo',text:'fresh'}],options:[],selectedOptionId:null});
+  await flush();assert.deepEqual(c.voice.session.state.todos.map(t=>t.text),['fresh']);
+  assert.equal(c.ws.sent.length,1);assert.equal(c.ws.sent[0].delegation_id,'second');
+});
+test('explicit stop during planning aborts without replacement; whitespace does not interrupt',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
+  let calls=0,signal;const c=await controlled(t,{assistant:{execute:(_id,_text,opts)=>{calls++;signal=opts.signal;return new Promise(()=>{});}}});
+  t.after(()=>c.voice.stop());delegate(c.ws);t.mock.timers.tick(900);
+  input(c.ws,'   ');assert.equal(c.voice.active.job.inputGate,undefined);
+  input(c.ws,'stop');t.mock.timers.tick(900);assert.equal(signal.aborted,true);
+  assert.equal(calls,1);assert.equal(c.voice.active.pending,null);assert.equal(c.ws.sent.at(-1).content,'Stopped that request.');
+});
+test('cleanup failure voice response reports planner blocker rather than asking for retries',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
+  const c=await controlled(t,{assistant:{execute:async()=>{throw recoveryError();}}});
+  t.after(()=>c.voice.stop());delegate(c.ws);t.mock.timers.tick(900);await flush();
+  assert.match(c.ws.sent.at(-1).content,/planning is paused/);
+  assert.doesNotMatch(c.ws.sent.at(-1).content,/display may have changed/);
+});
 test('timer fast lane: reported request commits at 700ms without delegation or paid planning',async t=>{
   t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
   let calls=0;const c=await controlled(t,{fastTimers:true,assistant:{execute:()=>{calls++;throw Error('unexpected planning');}}});
@@ -349,8 +395,8 @@ test('slow planning sends one interim acknowledgment and later the real result',
   t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
   let finish;const c=await controlled(t,{assistant:{execute:()=>new Promise(r=>finish=r)}});
   t.after(()=>c.voice.stop());delegate(c.ws);t.mock.timers.tick(900);
-  t.mock.timers.tick(1499);assert.equal(c.ws.sent.length,0);
-  t.mock.timers.tick(1);assert.equal(c.ws.sent.length,1);assert.match(c.ws.sent[0].content,/Still working/);
+  t.mock.timers.tick(1799);assert.equal(c.ws.sent.length,0);
+  t.mock.timers.tick(1);assert.equal(c.ws.sent.length,1);assert.match(c.ws.sent[0].content,/task_progress/);
   assert.equal(c.ws.sent[0].delegation_id,'d1');assert.equal(c.voice.active.pending,'d1');
   t.mock.timers.tick(5000);assert.equal(c.ws.sent.length,1);
   finish({status:'completed',message:'Added milk.'});await Promise.resolve();

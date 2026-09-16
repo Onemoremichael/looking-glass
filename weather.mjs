@@ -24,9 +24,9 @@ export function normalizeForecast(raw,place,units,now){
   if(!c||num(c.temperature_2m)===null||!Number.isFinite(c.time)||Math.abs(c.time*1000-now)>2*60*60*1000||!Array.isArray(h?.time)||!Array.isArray(d?.time)||d.time.length<2)throw Error('Incomplete forecast');
   const point=(time,temp,code,isDay=1)=>({time:time*1000,temp:num(temp),...condition(code,isDay)});
   const hourly=h.time.map((time,i)=>({...point(time,h.temperature_2m?.[i],h.weather_code?.[i],h.is_day?.[i]),rain:num(h.precipitation_probability?.[i],0,100)})).filter(p=>p.time>=now-60*60*1000&&Number.isFinite(p.time)).slice(0,48);
-  const daily=d.time.map((time,i)=>({time:time*1000,...condition(d.weather_code?.[i]),high:num(d.temperature_2m_max?.[i]),low:num(d.temperature_2m_min?.[i]),rain:num(d.precipitation_probability_max?.[i],0,100),sunrise:Number.isFinite(d.sunrise?.[i])?d.sunrise[i]*1000:null,sunset:Number.isFinite(d.sunset?.[i])?d.sunset[i]*1000:null})).slice(0,7);
+  const daily=d.time.map((time,i)=>({time:time*1000,...condition(d.weather_code?.[i]),high:num(d.temperature_2m_max?.[i]),low:num(d.temperature_2m_min?.[i]),rain:num(d.precipitation_probability_max?.[i],0,100),sunrise:Number.isFinite(d.sunrise?.[i])?d.sunrise[i]*1000:null,sunset:Number.isFinite(d.sunset?.[i])?d.sunset[i]*1000:null})).slice(0,16);
   if(hourly.length<6||!daily.every(p=>Number.isFinite(p.time)))throw Error('Incomplete forecast');
-  return {locationId:place.id,units,timeZone:place.timeZone,fetchedAt:now,current:{...point(c.time,c.temperature_2m,c.weather_code,c.is_day),feels:num(c.apparent_temperature),wind:num(c.wind_speed_10m,0,500),humidity:num(c.relative_humidity_2m,0,100)},hourly,daily};
+  return {horizonVersion:2,locationId:place.id,units,timeZone:place.timeZone,fetchedAt:now,current:{...point(c.time,c.temperature_2m,c.weather_code,c.is_day),feels:num(c.apparent_temperature),wind:num(c.wind_speed_10m,0,500),humidity:num(c.relative_humidity_2m,0,100)},hourly,daily};
 }
 function dateKey(time,zone){return new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(time));}
 export function weatherView(weather,now=Date.now(),id=weather?.activeId){
@@ -108,14 +108,14 @@ export class Weather {
   async refreshPlace(place){
     if(this.closed)return;
     const w=this.session.state.weather,units=w.units,key=place.id+':'+units,cached=w.forecasts[place.id];
-    if(cached?.units===units&&this.now()-cached.fetchedAt<WEATHER_TTL&&!w.errors[place.id])return;
+    if(cached?.horizonVersion===2&&cached.units===units&&this.now()-cached.fetchedAt<WEATHER_TTL&&!w.errors[place.id])return;
     if(this.inflight.has(key))return this.inflight.get(key).promise;
     if(this.now()-(this.attempts.get(key)??-Infinity)<60000)return;
     this.attempts.set(key,this.now());const controller=new AbortController();
     const task={controller};this.inflight.set(key,task);
     task.promise=(async()=>{
       const url=new URL('https://api.open-meteo.com/v1/forecast');
-      url.search=new URLSearchParams({latitude:place.latitude,longitude:place.longitude,timezone:place.timeZone,timeformat:'unixtime',forecast_days:'7',temperature_unit:units,wind_speed_unit:units==='fahrenheit'?'mph':'kmh',current:'temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,wind_speed_10m',hourly:'temperature_2m,precipitation_probability,weather_code,is_day',daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset'});
+      url.search=new URLSearchParams({latitude:place.latitude,longitude:place.longitude,timezone:place.timeZone,timeformat:'unixtime',forecast_days:'16',temperature_unit:units,wind_speed_unit:units==='fahrenheit'?'mph':'kmh',current:'temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,wind_speed_10m',hourly:'temperature_2m,precipitation_probability,weather_code,is_day',daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset'});
       const stillCurrent=()=>!this.closed&&this.session.state.weather.units===units&&this.session.state.weather.locations.some(l=>l.id===place.id);
       try{
         const forecast=normalizeForecast(await this.json(url,controller.signal),place,units,this.now());

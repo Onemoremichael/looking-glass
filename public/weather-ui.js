@@ -31,6 +31,7 @@
     if(!place)return '<section class="weather-scene wx-empty">'+icon('sun')+'<h2>Your places. Your sky.</h2><p>Add a city in the companion to bring the forecast here.</p></section>';
     var age=data?Math.max(now-data.fetchedAt,now-data.current.time,0):Infinity;
     if(!data||data.units!==w.units||age>21600000)return '<section class="weather-scene wx-empty">'+icon('cloud')+'<span class="wx-place">'+esc(place.name)+'</span><h2>'+(w.errors[place.id]||age>21600000&&data?'Forecast unavailable':'Finding your forecast…')+'</h2><p>No recent weather to show yet.</p></section>';
+    if(w.view==='custom'&&w.composition&&w.composition.data)return renderComposition(w.composition.data,age>1800000||w.errors[place.id]);
     var zone=data.timeZone,days=forecastDays(data,zone,now),period=w.view||'now',day=days[period==='tomorrow'?1:0],hero=period==='now'?data.current:day;
     if(!hero)return '<section class="weather-scene wx-empty"><h2>Forecast unavailable for that day.</h2></section>';
     var stale=age>1800000||w.errors[place.id],kind=hero.kind;
@@ -50,6 +51,17 @@
     var ageMinutes=Math.max(0,Math.floor((now-data.fetchedAt)/60000));
     html+='<p class="wx-source'+(stale?' wx-stale':'')+'">'+(stale?'Last available forecast · ':'')+'Open-Meteo · '+(ageMinutes<1?'updated just now':'updated '+ageMinutes+' min ago')+'</p></section>';
     return html;
+  }
+  function renderComposition(c,stale){
+    var html='<section class="weather-scene wx-composed wx-focus-'+esc(c.focus)+'"><div class="wx-head"><div><span class="wx-place">'+esc(c.place)+'</span><h2 class="wx-composed-title">'+esc(c.title)+'</h2><span class="wx-period">'+esc(c.range.start)+' — '+esc(c.range.end)+'</span></div><span class="wx-unit">°'+esc(c.unit)+'</span></div>';
+    c.components.forEach(function(component){
+      if(component==='highlights'&&c.highlights.length)html+='<div class="wx-composed-highlights">'+c.highlights.map(function(h){return '<div><span>'+esc(h.label)+'</span><strong>'+esc(h.value)+'</strong><small>'+esc(h.detail)+'</small></div>';}).join('')+'</div>';
+      if(component==='temperature_band'&&c.band)html+='<div class="wx-temperature-band"><span>Overnight lows to daytime highs</span><strong>'+value(c.band.low)+'° — '+value(c.band.high)+'°</strong></div>';
+      if(component==='daily_forecast')html+='<div class="wx-days">'+c.days.map(function(d){return '<div class="wx-day">'+sky(d.kind,d.label)+'<div class="wx-day-description"><span class="wx-day-name">'+esc(d.day)+'</span><span class="wx-day-condition">'+esc(d.label)+'</span></div><div class="wx-day-values"><strong>'+value(d.high)+'° <span>'+value(d.low)+'°</span></strong><span class="wx-composed-rain">'+(typeof d.rain==='number'?value(d.rain)+'% precip.':'Precip. unavailable')+'</span></div></div>';}).join('')+'</div>';
+    });
+    html+=c.warnings.map(function(w){return '<p class="wx-composed-warning">'+esc(w)+'</p>';}).join('');
+    if(stale&&c.status!=='stale')html+='<p class="wx-composed-warning">Last available forecast; may be stale.</p>';
+    return html+'<p class="wx-source">Open-Meteo · '+(c.fetchedAt?'updated '+esc(time(c.fetchedAt,'UTC',{hour:'numeric',minute:'2-digit'}))+' UTC':'forecast unavailable')+'</p></section>';
   }
   window.GlassWeather={render:render,renderArt:sky};
 }());
