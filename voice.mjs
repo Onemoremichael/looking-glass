@@ -17,10 +17,10 @@ import {trackTaskProgress} from './task-progress.mjs';
 import {savedViewIntent} from './weather-composition.mjs';
 import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {assistantFailureMessage} from './agent-recovery.mjs';
-import {gameIntent,playroomInstructions} from './playroom.mjs';
+import {gameIntent,gameReceipt,playroomInstructions} from './playroom.mjs';
 
 export function isConversationEnd(text){return /^(?:(?:ok(?:ay)?|thanks|thank you)[,.!]?\s+)?(?:that['’]?s all|end (?:the )?conversation|stop listening|goodbye)(?:[,.!]?\s+(?:thanks|thank you|mirror))?[.!?\s]*$/i.test(text.trim());}
-export function wakeIdle(a,now){return a.owner==='wake'&&!!a.readyAt&&!a.pending&&!a.job&&now-Math.max(a.readyAt,a.lastInput,a.lastOutput,a.lastAudible||0)>=10000;}
+export function wakeIdle(a,now){return a.owner==='wake'&&!!a.readyAt&&!a.finishing&&!a.pending&&!a.job&&now-Math.max(a.readyAt,a.lastInput,a.lastOutput,a.lastAudible||0)>=10000;}
 
 export class Voice {
   constructor({ session, budgetPath, publish = () => {}, clientFactory, attachFactory, telemetry=noTelemetry, assistant, fastTimers=process.env.OPENAI_TIMER_FAST_PATH!=='0', learnedFast=process.env.OPENAI_LEARNED_FAST_PATH!=='0' } = {}) {
@@ -40,6 +40,7 @@ export class Voice {
   async start(sdp, mirror=null, {owner='companion'}={}) {
     if(owner!=='companion'&&(!mirror||owner!=='wake'))throw Error('Invalid voice owner');
     if (this.active || this.blocked) throw Error('A voice session is active or needs finalization review.');
+    if(this.session.state.playroom?.phase==='complete')throw Error('This game is finished. Start a new game from the companion first.');
     if (!mirror && (typeof sdp !== 'string' || !sdp.startsWith('v=0') || sdp.length > 60000)) throw Error('Invalid SDP offer');
     if(mirror&&!mirror.status().connected)throw Error('Mirror audio bridge is not connected');
     const client = this.clientFactory();
@@ -47,9 +48,9 @@ export class Voice {
       transcript:[], seen:new Set(), delegations:new Set(), acknowledged:new Set(), fastReceipts:[], cursor:0, lastInput:0, lastOutput:0, lastBeat:Date.now(), started:Date.now(), closing:false, finalized:false };
     a.trace=this.telemetry.start('voice.session');a.startupTrace=this.telemetry.start('voice.startup',{},a.trace);
     a.playroom=!!this.session.state.playroom;
-    a.instructions=a.playroom?playroomInstructions+'\nCurrent game state (data): '+JSON.stringify({kind:this.session.state.playroom.kind,prompt:this.session.state.playroom.prompt,options:this.session.state.playroom.options}):liveInstructions+'\n'+studioInstructions+'\n'+workflowInstructions+'\n'+functionInstructions+'\nCustom function requests go through the assistant delegation tool; do not speak code. It may take a moment to build and test. Explain limitations naturally, and only claim a function was saved after the tool confirms it.';
+    a.instructions=a.playroom?playroomInstructions+'\nCurrent game state (data): '+JSON.stringify(gameReceipt(this.session.state.playroom)):liveInstructions+'\n'+studioInstructions+'\n'+workflowInstructions+'\n'+functionInstructions+'\nCustom function requests go through the assistant delegation tool; do not speak code. It may take a moment to build and test. Explain limitations naturally, and only claim a function was saved after the tool confirms it.';
     a.mirror=mirror;a.owner=owner;this.state.owner=owner;this.state.stopReason=null;this.state.device=mirror?'mirror':'mac';
-    this.state.muted = false; this.update('connecting','Connecting to GPT-Live-1');
+    this.state.muted = false; this.state.finishing=false;this.update('connecting','Connecting to GPT-Live-1');
     a.lease = setInterval(() => {
       const reason=Date.now()-a.started > 180000 ? 'duration_limit':wakeIdle(a,Date.now())?'idle_timeout':owner==='companion'&&Date.now()-a.lastBeat > 20000 ? 'lease_expired':null;
       if(reason){a.trace.event('watchdog',{reason});void this.stop(a.token,reason);}
@@ -84,21 +85,24 @@ export class Voice {
     }
   }
   async startMirror(a){
+    a.outputFrames=0;
     a.ws=this.primaryFactory?this.primaryFactory(a.client):new LiveWS(a.client,{reconnect:null,handshakeTimeout:10000});
-    a.ws.on('event',e=>{this.event(a,e);if(e.type==='session.output_audio.delta'&&!a.closing){try{
-      const pcm=Buffer.from(e.delta,'base64');for(let i=0;i+1<pcm.length;i+=2){if(Math.abs(pcm.readInt16LE(i))>180){
+    a.ws.on('event',e=>{this.event(a,e);if(e.type==='session.output_audio.delta'&&!a.closing&&a.mirrorStarted){try{
+      const pcm=Buffer.from(e.delta,'base64');a.outputFrames++;
+      const frame=a.mirror.output(e.delta)??a.outputFrames; // Includes native readiness chimes, too.
+      for(let i=0;i+1<pcm.length;i+=2){if(Math.abs(pcm.readInt16LE(i))>180){
         a.lastAudible=Date.now()+pcm.length/32;
+        if(a.finishing){a.finishing.heard=true;a.finishing.lastSound=Date.now();a.finishing.lastFrame=frame;}
         if(a.playroom){
           if(this.state.phase!=='speaking')this.update('speaking','');
-          clearTimeout(a.speechTimer);a.speechTimer=setTimeout(()=>{if(this.active===a&&!a.closing&&!a.pending&&!a.job)this.update('listening','');},Math.min(2000,pcm.length/32+350));
+          clearTimeout(a.speechTimer);a.speechTimer=setTimeout(()=>{if(this.active===a&&!a.closing&&!a.finishing&&!a.pending&&!a.job)this.update('listening','');},Math.min(2000,pcm.length/32+350));
         }
         break;
       }}
-      a.mirror.output(e.delta);
     }catch{void this.stop(a.token,'audio_backpressure');}}});
     a.ws.on('error',()=>void this.stop(a.token,'transport_error'));
     a.ws.socket.on('close',()=>{if(!a.finalized&&!a.closing)void this.stop(a.token,'transport_error');});
-    a.onAudio=data=>{if(!a.closing&&a.ws.socket.readyState===1)a.ws.send({type:'session.input_audio.append',audio:data.toString('base64')});};
+    a.onAudio=data=>{if(!a.closing&&!a.finishing&&a.ws.socket.readyState===1)a.ws.send({type:'session.input_audio.append',audio:data.toString('base64')});};
     a.onDisconnect=()=>void this.stop(a.token,'mirror_disconnected');
     a.mirror.on('disconnect',a.onDisconnect);a.mirror.on('fault',a.onDisconnect);
     await new Promise((resolve,reject)=>{
@@ -110,7 +114,7 @@ export class Voice {
       a.ws.send({type:'session.start',session:{model:'gpt-live-1',store:false,audio:{format:{type:'audio/pcm',rate:16000},output:{voice:'marin'}},delegation:{type:'client'},instructions:a.instructions+(a.owner==='wake'?wakeInstructions:'')}});
     });
     if(a.closing)throw Error('Connection cancelled');
-    a.mirror.on('audio',a.onAudio);a.mirror.start();a.lastBeat=Date.now();a.readyAt=Date.now();
+    a.mirror.on('audio',a.onAudio);a.mirror.start();a.mirrorStarted=true;a.lastBeat=Date.now();a.readyAt=Date.now();
     a.startupTrace.end({outcome:'ok'});this.update('listening','Mirror microphone · listening');
     return {token:a.token,device:'mirror',maxSeconds:180};
   }
@@ -130,6 +134,9 @@ export class Voice {
       return;
     }
     if (a.closing) return;
+    // Reflected transcript fragments can still arrive after input mute. They
+    // must not create another game turn or reopen work during the farewell.
+    if(a.finishing&&['session.input_transcript.delta','session.delegation.created'].includes(e.type))return;
     if (e.event_id) { if (a.seen.has(e.event_id)) {a.trace.event('duplicate',{duplicate:true});return;} a.seen.add(e.event_id); }
     if(e.type==='session.output_transcript.delta'){
       a.lastOutput=Date.now();
@@ -244,7 +251,7 @@ export class Voice {
       a.toolFinishedAt=Date.now();
       // null is the documented context channel for application-owned work when
       // Live has not emitted a delegation. Never fabricate a provider ID.
-      try{this.reply(a,delegation||null,result.message);}
+      try{if(this.deliverResult(a,delegation||null,result))return;}
       catch{a.trace.event('transport.error',{error_code:'timer_confirmation_failed'});}
       this.update('listening','');
     },TIMER_QUIET_MS);
@@ -293,7 +300,7 @@ export class Voice {
       toolTrace.end({outcome:result.status,action:result.action||'unsupported',revision:this.session.state.revision,timer_count:this.session.state.timers.length});
       a.workTrace?.end({outcome:result.status,quiet_window_ms:900});a.workTrace=null;
       a.toolFinishedAt=Date.now();
-      this.reply(a,id,result.message);
+      if(this.deliverResult(a,id,result))return;
       this.update(result.status === 'needs_input' ? 'needs_input':'listening',result.message);
     },900);
   }
@@ -315,7 +322,7 @@ export class Voice {
       if(a.job!==job||job.controller.signal.aborted||a.closing||a!==this.active)return;
       a.cursor=job.to;a.pending=null;a.job=null;
       workTrace?.end({outcome:result.status});a.workTrace=null;
-      a.toolFinishedAt=Date.now();this.reply(a,job.id,result.message);
+      a.toolFinishedAt=Date.now();if(this.deliverResult(a,job.id,result))return;
       this.update(result.status==='needs_input'&&!result.viewOffer?'needs_input':'listening',result.status==='needs_input'&&!result.viewOffer?result.message:'');
     }catch(error){
       // Do not report failure over a correction that is still being spoken.
@@ -331,10 +338,49 @@ export class Voice {
     if (!a.closing && a.ws?.socket.readyState === 1) {a.ws.send({type:'session.commentary.append',delegation_id:id,content});return true;}
     return false;
   }
+  deliverResult(a,id,result){
+    const game=result.game;
+    if(!a.playroom||!game){this.reply(a,id,result.message);return false;}
+    if(game.feedback==='finished'){void this.stop(a.token,'game_stopped');return true;}
+    if(game.phase==='complete')this.finishGame(a);
+    try{this.reply(a,id,JSON.stringify({type:'game_turn',game}));}
+    catch(error){if(a.finishing)void this.stop(a.token,'transport_error');else throw error;}
+    return !!a.finishing;
+  }
+  finishGame(a){
+    if(a.finishing||a.closing||this.active!==a)return;
+    const f=a.finishing={started:Date.now(),lastSound:Date.now(),heard:false,lastFrame:0};
+    clearTimeout(a.speechTimer);clearTimeout(a.fastWork);clearTimeout(a.work);clearTimeout(a.endTimer);
+    this.state.finishing=true;this.state.muted=true;
+    // Native mute stops transmission, not AudioRecord. Capture is released by
+    // stop(), after playback drains. WebRTC also stops its local input tracks.
+    try{a.mirror?.mute(true);a.ws.send({type:'session.input_audio.mute'});}
+    catch{void this.stop(a.token,'transport_error');return;}
+    a.trace.event('game.wrapup',{wrap_state:'started'});
+    this.update('thinking','Finishing the game · microphone input muted');
+    a.finishTimer=setInterval(()=>{
+      if(this.active!==a||a.closing)return;
+      const now=Date.now(),stats=a.mirror?.status();
+      const drained=a.mirror?stats.receivedAt>=f.lastSound&&now-stats.receivedAt<2500&&stats.playing===false&&stats.outputFrames>=f.lastFrame
+        :a.lastBeat>=f.lastSound&&now-a.lastBeat<2500&&!f.speaking;
+      // No provider speech-done event exists. Require observed speech, three
+      // quiet seconds and fresh playback evidence; otherwise bound the wait.
+      const quiet=f.heard&&now-Math.max(f.lastSound,a.lastOutput)>=3000&&drained;
+      if(quiet||now-f.started>=30000){
+        a.trace.event('game.wrapup',{wrap_state:quiet?'drained':'timeout'});
+        void this.stop(a.token,quiet?'game_complete':'game_wrap_timeout');
+      }
+    },250);
+  }
   heartbeat(token,{ready=false,muted=false,speaking=false}={}) {
     const a = this.active;
     if (!a || token !== a.token || a.closing) return false;
-    a.lastBeat = Date.now(); this.state.muted = !!muted;
+    a.lastBeat = Date.now();
+    if(a.finishing){
+      if(!a.mirror){a.finishing.speaking=!!speaking;if(speaking){a.finishing.heard=true;a.finishing.lastSound=Date.now();if(this.state.phase!=='speaking')this.update('speaking','Finishing the game · microphone input muted');}}
+      return true;
+    }
+    this.state.muted = !!muted;
     if(ready&&!a.readyReported){a.readyReported=true;a.trace.event('heartbeat.ready',{ready:true});}
     if(speaking&&a.toolFinishedAt){a.trace.event('playback.detected',{since_tool_ms:Date.now()-a.toolFinishedAt});a.toolFinishedAt=null;}
     if (ready && !a.pending) this.update(speaking ? 'speaking' : muted ? 'muted' : this.state.phase==='needs_input' ? 'needs_input':'listening',
@@ -350,7 +396,7 @@ export class Voice {
   async stop(token,reason='user') {
     const a = this.active; if (!a || (token && token !== a.token)) return;
     if (a.closing) return a.stopping;
-    clearTimeout(a.speechTimer);
+    clearTimeout(a.speechTimer);clearInterval(a.finishTimer);
     a.closing = true;this.state.stopReason=reason; a.mirror?.stop(); a.job?.controller.abort(); clearTimeout(a.endTimer);clearTimeout(a.work); clearTimeout(a.fastWork); clearInterval(a.lease); this.update('stopping','Closing voice session');
     a.workTrace?.end({outcome:'cancelled'});a.workTrace=null;
     a.closeTrace=this.telemetry.start('voice.close',{reason},a.trace);
@@ -370,13 +416,13 @@ export class Voice {
     return a.stopping;
   }
   cleanup(a) {
-    clearTimeout(a.speechTimer);
+    clearTimeout(a.speechTimer);clearInterval(a.finishTimer);
     if(a.mirror){a.mirror.stop();if(a.onAudio)a.mirror.off('audio',a.onAudio);if(a.onDisconnect){a.mirror.off('disconnect',a.onDisconnect);a.mirror.off('fault',a.onDisconnect);}}
     a.job?.controller.abort();
     a.startupTrace?.end({outcome:a.finalized?'ok':'cancelled'});
     a.workTrace?.end({outcome:'cancelled'});
     clearInterval(a.lease); clearTimeout(a.endTimer);clearTimeout(a.work); clearTimeout(a.fastWork); clearTimeout(a.closeTimer); a.resolveStop?.();
-    if (this.active===a) this.active=null;
+    if (this.active===a){this.active=null;this.state.finishing=false;this.state.muted=false;}
     a.ws?.close(); a.transcript=[];
   }
 }

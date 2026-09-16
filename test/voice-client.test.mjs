@@ -31,6 +31,15 @@ function fixture(t,{microphone,answer,fetcher,resume,meterFails=false}={}){
   });
   return {el,posts,logs,track,stream,listeners,contexts,activity,peers};
 }
+test('game farewell releases browser input, retains playback, disables unmute and allows immediate stop',async t=>{
+  const f=fixture(t);await f.el('voice-start').onclick();
+  f.listeners['glass-voice']({detail:{phase:'speaking',finishing:true,muted:true,detail:'Finishing the game'}});
+  assert.equal(f.track.stopped,true);assert.equal(f.el('voice-mute').disabled,true);
+  const before=f.posts.length;f.el('voice-mute').onclick();assert.equal(f.posts.length,before);
+  assert.equal(f.posts.includes('/api/voice/stop'),false);
+  assert.equal(f.el('voice-stop').disabled,false);
+  await f.el('voice-stop').onclick();assert.ok(f.posts.includes('/api/voice/stop'));
+});
 test('suspended AudioContext meter does not block capture or voice startup',async t=>{
   const f=fixture(t,{resume:new Promise(()=>{})});await f.el('voice-start').onclick();
   assert.equal(f.contexts.length,0); // Meter isn't created on the permission path.

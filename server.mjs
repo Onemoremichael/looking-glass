@@ -154,7 +154,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
           catch (e) { return json(409,{error:e.message}); }
         }
         if (!voice.active || body.token!==voice.active.token) return json(409,{error:'No matching active session'});
-        if(path==='/api/voice/mute'&&voice.active.mirror){voice.active.mirror.mute(!!body.muted);return json(200,{ok:true});}
+        if(path==='/api/voice/mute'&&voice.active.mirror){if(voice.active.finishing)return json(409,{error:'The game is finishing; start a new game after it closes.'});voice.active.mirror.mute(!!body.muted);return json(200,{ok:true});}
         if (path==='/api/voice/heartbeat') return json(200,{ok:voice.heartbeat(body.token,body)});
         if (path==='/api/voice/stop') { await voice.stop(body.token); return json(200,voice.state); }
         return json(404,{error:'Unknown voice operation'});

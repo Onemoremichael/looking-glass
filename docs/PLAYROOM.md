@@ -37,6 +37,53 @@ does **not** verify the GPT-Live game experience. No new paid voice test was run
 in the workflow-reuse pass. See the [official model description](https://developers.openai.com/api/docs/models/gpt-live-1)
 for GPT-Live's conversational role; local code owns the configured voice selection.
 
+### Live game turns and automatic farewell (September 16)
+
+The engine now attaches a structured `game_turn` receipt to each spoken result:
+verified feedback, progress, selected story choices, displayed options and the next
+prompt. It contains no raw answer transcript. Replayed receipts retain their
+original turn even as the game advances. Marin can be warm and imaginative inside
+that verified state; the voice does not award credit, select choices or invent
+progress itself. The final Pip line is still a bounded three-choice story, not
+proof of a complete generative storytelling experience.
+
+On the last card/choice, the app requests one brief farewell and enters a finishing
+state. Input is muted before that request; late transcript/delegation events cannot
+advance/restart the game. Browser microphone tracks stop while output stays open.
+For the native Mirror, PCM upload stops and native mute is set, but **AudioRecord
+remains allocated until playback completes and `stop` releases it**. Companion
+unmute is disabled and refused server-side during finishing. End and spoken game
+stop close immediately. Starting voice on a completed game is rejected before a
+budget reservation; start a fresh game from the companion instead.
+
+The [official Live API reference](https://developers.openai.com/api/reference/typescript/resources/live)
+documents input mute and terminal `session.closed` usage, but transcript fragments
+and commentary acknowledgments are not speech-completion signals. Consequently,
+the app uses a **heuristic**, not a claimed provider completion event: observed
+speech, three quiet seconds, and fresh playback evidence. Native reports must show
+the last audible chunk consumed and no current playback; the browser uses its
+output meter/heartbeat. A 30-second limit prevents indefinite waiting if playback
+evidence is missing (including an unavailable browser meter); that fallback may
+clip delayed speech and is recorded as `game_wrap_timeout`, not a successful drain.
+Normal disconnect, billing and lease watchdogs remain active. Wake is disarmed
+after a game end rather than silently reopening local listening.
+
+`game.wrapup` telemetry records only `started`, `drained` or `timeout`; no game
+answers, prompts or choices are added to traces. Final API usage is still required
+to clear the reservation. Offline tests cover Mac/native completion, frozen turns,
+stale/queued playback, explicit stop, fallback deadlines, receipt isolation, wake
+disarm, refused unmute, session replacement and missing terminal usage.
+
+**Offline verification:** 265 tests pass across the repository. The bridge tests
+also verify that drain targets count Android's 640-byte playback blocks, including
+readiness cues, and that stale status is not accepted as fresh playback evidence.
+
+**Acceptance still pending:** no new paid GPT-Live session or physical audio test
+was run for this pass, and no allowance was increased. The paid rehearsal script
+now requires automatic `game_complete`, finalized voice and a native capture-off
+report before passing. Local Samantha tests do not satisfy that gate. Child-safety,
+retention and real voice-quality/turn-taking acceptance remain open.
+
 ## Opt-in local diagnostics (Mac + Mirror)
 
 Install with `npm run wake:setup` followed by `npm run playroom:setup`. The latter

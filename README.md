@@ -90,8 +90,11 @@ connection still shows a stale-data warning.
   [image workflow, budget accounting and limits](docs/IMAGE-STUDIO.md).
 - Adult-only playroom rehearsal: four illustrated animal cards and a bounded Pip
   bear adventure, with local game state and isolated GPT-Live/Marin voice instructions.
-  GPT-Live remains the intended primary conversational experience. Optional local
-  diagnostics use a different voice (Mac Samantha), not a replacement or automatic
+  GPT-Live remains the intended primary conversational experience.
+  Verified game-turn receipts guide expressive replies; game completion now mutes
+  input, waits for a bounded farewell drain, and closes the Live session. These
+  lifecycle changes pass offline tests; paid voice acceptance remains pending.
+  Optional local diagnostics use a different voice (Mac Samantha), not a replacement or automatic
   fallback. Run
   `npm run wake:setup` then `npm run playroom:setup` to install local speech. Physical
   bear play completes with spoken option numbers; animal-name recognition is still

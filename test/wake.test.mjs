@@ -32,6 +32,13 @@ test('spoken stop listening disables standby instead of silently reopening the m
   const f=fixture(t);await f.wake.enable();await f.wake.trigger();await f.voice.stop(null,'spoken_disable');f.advance(500);
   assert.equal(f.wake.state.enabled,false);assert.equal(f.mirror.mode,'off');f.advance(4000);assert.equal(f.mirror.mode,'off');
 });
+test('game end disarms wake and does not reopen capture after farewell',async t=>{
+  for(const reason of ['game_complete','game_stopped','game_wrap_timeout']){
+    const f=fixture(t);await f.wake.enable();await f.wake.trigger();await f.voice.stop(null,reason);f.advance(500);
+    assert.equal(f.wake.state.enabled,false);assert.equal(f.wake.state.reason,'game_finished');
+    f.advance(5000);assert.equal(f.mirror.mode,'off');assert.equal(f.voice.calls,1);
+  }
+});
 test('disarm during in-flight startup closes late session and cannot unmute or rearm',async t=>{
   const f=fixture(t);let resolve;f.voice.start=async()=>{f.voice.active={owner:'wake'};await new Promise(r=>resolve=r);};
   await f.wake.enable();const pending=f.wake.trigger();await f.wake.disable();resolve();await pending;

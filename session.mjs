@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import {newGame,advanceGame} from './playroom.mjs';
+import {newGame,advanceGame,gameReceipt} from './playroom.mjs';
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { validateDecision,matches } from './assistant-contract.mjs';
@@ -124,6 +124,7 @@ export class Session {
       this.state.assistantHistory=this.state.playroom?[]:[...(this.state.assistantHistory||[]),{user:utterance,assistant:message,outcome:decision.outcome,status:decision.status}].slice(-8);
       const result={status:decision.status==='clarify'?'needs_input':'completed',action:'assistant',message:message+(decision.options.length?' Options: '+decision.options.map((o,i)=>`${i+1}. ${o.label}`).join('; '):'')};
       result.executedActions=decision.actions.map(a=>a.action);
+      if(decision.actions.some(a=>a.action==='playroom_turn'))result.game=gameReceipt(this.state.playroom);
       result.options=structuredClone(decision.options);
       if(decision.status==='clarify'){result.questionId=card.id;result.question=decision.message;}
       if(decision.actions.some(a=>a.action==='add_todo'))result.createdTodoIds=this.state.todos.filter(t=>!before.todos.some(b=>b.id===t.id)).map(t=>t.id);

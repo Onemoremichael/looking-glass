@@ -57,6 +57,7 @@ export class Wake {
     if(this.now()>=this.state.expiresAt){void this.disable('arming_expired');return;}
     if(this.state.phase==='standby'&&this.now()-this.detector.lastProgress>5000){void this.disable('audio_or_detector_stalled');return;}
     if(this.state.phase==='conversation'&&!this.voice.active){
+      if(['game_complete','game_stopped','game_wrap_timeout'].includes(this.voice.state.stopReason)){void this.disable('game_finished');return;}
       if(this.voice.state.stopReason==='spoken_disable'){void this.disable('spoken_disable');return;}
       if(this.voice.blocked||!['idle_timeout','spoken_end','duration_limit','user'].includes(this.voice.state.stopReason)){
         void this.disable('voice_ended_unexpectedly');return;
