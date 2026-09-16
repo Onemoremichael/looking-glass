@@ -60,3 +60,23 @@ test('absent, invalid and malformed time zones keep the device-local fallback',(
     const options=clockOptions(search);assert.equal(options.time.timeZone,undefined);assert.equal(options.date.timeZone,undefined);
   }
 });
+test('native conversation indicator replaces routine footer but preserves actionable status',()=>{
+  const elements={};let handlers;
+  runInNewContext(readFileSync(new URL('../public/display.js',import.meta.url),'utf8'),{
+    location:{search:''},Intl,Date,setInterval(){},
+    window:{GlassSurface:{subscribe(value){handlers=value;}}},
+    document:{getElementById:id=>elements[id]??={setAttribute(){}},querySelectorAll:()=>[]}
+  });
+  for(const phase of ['listening','speaking','muted','off']){
+    handlers.voice({device:'mirror',phase});
+    assert.equal(elements['mirror-voice'].className,'mirror-voice off');
+  }
+  for(const phase of ['connecting','thinking','needs_input','error','stopping']){
+    handlers.voice({device:'mirror',phase,detail:'Which timer?'});
+    assert.equal(elements['mirror-voice'].className,'mirror-voice');
+    assert.ok(elements['mirror-voice-label'].textContent);
+  }
+  handlers.voice({device:'mac',phase:'listening'});
+  assert.equal(elements['mirror-voice'].className,'mirror-voice');
+  assert.equal(elements['mirror-voice-label'].textContent,'Listening');
+});

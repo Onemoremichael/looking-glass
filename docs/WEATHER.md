@@ -60,9 +60,14 @@ ambiguous city names, unsaved cities and complex requests retain contextual plan
 Weather state and presentation are available to the planner; unknown places must not
 silently fall back to the active city. Settings/adding new cities remain companion-only.
 
+Future/follow-up requests can use `compose_weather` to assemble existing components
+for next week, later this week, a weekend, rolling seven days, or specific dates.
+Provider requests now cover up to 16 days, with at most seven dates in a composition.
+After rendering, an explicit yes can save the layout/date rule for reuse; facts are
+not frozen. See [adaptive views](ADAPTIVE-VIEWS.md) for the contract and lifecycle.
 The [structured output contract](https://developers.openai.com/api/docs/guides/structured-outputs)
-remains bounded: one new action, no new model or API transport. Prompt integration
-distinguishes actual provider data from the still-unconnected calendar/research features.
+remains bounded; no arbitrary code, new model or API transport. Actual provider data
+is distinguished from the still-unconnected calendar/research features.
 
 ## Mirror design
 

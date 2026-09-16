@@ -20,9 +20,10 @@
     if(state.panel==='todos')html=state.todos.slice(0,5).map(function(t,i){return '<p class="'+(t.done?'done':'')+'">'+(i+1)+'. '+(t.done?'✓ ':'○ ')+esc(t.text)+'</p>';}).join('')+(state.todos.length>5?'<p class="note">More items on your companion.</p>':'')||'<p class="empty">Nothing on your list.</p>';
     if(state.panel==='tasks')html=state.tasks.slice(0,3).map(function(t){return '<article><span class="tag">'+esc(t.status.replace('_',' '))+'</span><h3>'+esc(t.request)+'</h3><p>'+esc(t.question||t.detail||'')+'</p>'+(t.status==='needs_input'?'<p class="note">Prototype request · reply using companion controls</p>':'')+'</article>';}).join('');
     if(state.panel==='saved')html=state.recipes.slice(0,3).map(function(r){return '<article><span class="tag">CONFIGURATION ONLY · DATA NOT CONNECTED</span><h3>'+esc(r.title)+'</h3><p>'+esc(r.preferences)+'</p></article>';}).join('');
+    if(state.panel==='saved')html=(state.weatherViews||[]).slice(0,3).map(function(v){return '<article><h3>'+esc(v.spec.title)+'</h3><p>'+esc(v.spec.range.replace(/_/g,' '))+' · '+esc(v.spec.focus)+' focus</p></article>';}).join('')+html;
     // Timers remain visible regardless of the requested panel.
     html+=state.timers.map(function(t){return '<article><span class="tag">'+esc(t.label)+'</span><div class="countdown" data-end="'+t.endsAt+'"></div></article>';}).join('');
-    document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html;tick();window.GlassSurface.rendered(state);
+    document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html+window.GlassSurface.saveOffer(state);tick();window.GlassSurface.rendered(state);
   }
   function tick(){
     var d=new Date();document.getElementById('clock').textContent=d.toLocaleTimeString([],timeOptions);
@@ -32,7 +33,9 @@
   }
   window.GlassSurface.subscribe({voice:function(state){
     var indicator=document.getElementById('mirror-voice');
-    indicator.className='mirror-voice'+(state.phase==='off'?' off':''); indicator.setAttribute('data-phase',state.phase);
+    // Native audio has its own level-reactive indicator; retain actionable web status.
+    var nativeRoutine=state.device==='mirror'&&['listening','speaking','muted'].indexOf(state.phase)!==-1;
+    indicator.className='mirror-voice'+(state.phase==='off'||nativeRoutine?' off':''); indicator.setAttribute('data-phase',state.phase);
     document.getElementById('mirror-voice-label').textContent=state.phase==='needs_input'?state.detail:({listening:'Listening',thinking:'Working on your request',speaking:'Speaking',muted:'Mic muted',connecting:'Connecting',stopping:'Finishing',error:'Voice unavailable'}[state.phase]||'');
   },
   state:function(state){render(state);var status=document.getElementById('connection');status.textContent='';status.hidden=true;},

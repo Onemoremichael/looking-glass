@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { plannerDecisionSchema, validateDecision } from './assistant-contract.mjs';
 import { assistantInstructions } from './prompts/assistant-instructions.mjs';
+import {closeAgentSession,recoveryError} from './agent-recovery.mjs';
 
 // Agents API, not Agents SDK. The cloud agent only proposes JSON: no application
 // mutation can occur until a completed turn passes our local validation/commit.
@@ -22,9 +23,27 @@ export class AgentsPlanner {
     this.pending.catch(()=>{});return work;
   }
   async drain(){await this.pending;}
+  async recover({signal,trace}={}) {
+    const unresolved=this.budget.unresolvedAgents?.()||[];
+    if(!unresolved.length)return;
+    this.client ||= new OpenAI({maxRetries:0,timeout:15000});
+    for(const run of unresolved){
+      if(signal?.aborted)throw Error('Request cancelled');
+      // Unknown IDs and live owners cannot be safely reconciled automatically.
+      if(run.status!=='unconfirmed'||!run.sessionId)throw recoveryError();
+      if(this.recoveryFailedAt&&Date.now()-this.recoveryFailedAt<30000)throw recoveryError();
+      const span=this.telemetry?.start('agent.recovery',{},trace);
+      const result=await closeAgentSession(this.client.beta.agents.sessions,run.sessionId,{complete:run.complete,inspect:true});
+      this.budget.recordAgentRecovery(run.id,result);
+      span?.end({outcome:result.cleaned?'completed':'unconfirmed'});
+      if(!result.cleaned){this.recoveryFailedAt=Date.now();throw recoveryError();}
+    }
+  }
   async runDecision(context,{signal,trace}={}) {
     const started=Date.now();let plannedAt;
     this.client ||= new OpenAI({maxRetries:0,timeout:15000});
+    await this.recover({signal,trace});
+    if(signal?.aborted)throw Error('Request cancelled');
     const reservation=this.budget.reserve('agents-decision');
     const deadline=AbortSignal.timeout(this.timeoutMs),combined=signal?AbortSignal.any([signal,deadline]):deadline;
     let stream,sessionId,complete=false,text='',usage,rejected=false,accepted=false;
@@ -59,12 +78,7 @@ export class AgentsPlanner {
       // Independent cleanup signal: an aborted user request still needs server cancellation.
       this.cleanup=(async()=>{
         let cleaned=rejected;
-        if(sessionId)try {
-          if(!complete)try{await this.client.beta.agents.sessions.events.create(sessionId,{events:[{type:'agent.session.input.cancel'}]},{timeout:5000});}catch{/* Still attempt deletion if cancellation fails. */}
-          try{await this.client.beta.agents.sessions.delete(sessionId,{timeout:5000});}
-          catch(error){if(error.status!==404)await this.client.beta.agents.sessions.delete(sessionId,{timeout:10000});}
-          cleaned=true;
-        }catch{/* Reservation remains charged conservatively; never silently retry inference. */}
+        if(sessionId)cleaned=(await closeAgentSession(this.client.beta.agents.sessions,sessionId,{complete})).cleaned;
         this.budget.finishAgent(reservation,{complete,cleaned,usage});
         timing.cleanupMs=Date.now()-cleanupStarted;timing.totalMs=Date.now()-started;
         cleanupTrace?.end({outcome:cleaned?'completed':'unconfirmed'});

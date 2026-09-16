@@ -32,7 +32,7 @@ npm start
 
 The mirror is output-only: no forms, buttons, links, or touch navigation.
 The phone/computer companion owns all current controls and shares state with the
-display. A Mac-only voice prototype is now available on the companion. Active timers
+display. Voice can use the Mac or the native USB Mirror audio bridge. Active timers
 stay visible across panels. The mirror has a small active-conversation indicator,
 hidden when voice is off. Setup controls remain on the companion. A lost display
 connection still shows a stale-data warning.
@@ -45,6 +45,10 @@ connection still shows a stale-data warning.
   transparent dimensional weather artwork and a contrasting four-reading forecast strip.
   Small art uses dark-blue backplates; rain has fine independently animated hero streaks
   and static forecast marks, with reduced-motion support.
+- Adaptive future-weather views: the planner assembles highlights, temperature ranges,
+  and dated forecasts, automatically saving the layout in the shared repertoire. Saved
+  views reuse their configuration with refreshed facts and re-resolved relative dates.
+  See [adaptive views and voice test flow](docs/ADAPTIVE-VIEWS.md).
 - State saved atomically to ignored `data/state.json`; restart preserves items.
 - Request capture and an example clarification flow for Gators sports.
 - Explicit blocked status when research requires an unconnected data provider/worker.
@@ -67,7 +71,8 @@ connection still shows a stale-data warning.
   acknowledgments, and stable choice IDs for replies such as “yeah, the second one.”
 - Validated, atomic batches and durable receipts; stale or cancelled decisions cannot commit.
 - Quiet result-first UI: no routine success cards. Questions and options remain visible;
-  a slow pending request cues one brief natural acknowledgment before the final result.
+  slower work supplies factual progress context for natural acknowledgments and a
+  later update, without scripted chatter or guaranteed speed promises.
 - Completed decisions return before cloud-session cleanup; cleanup still gates the next
   paid call and is awaited on shutdown. Separate planning/cleanup traces expose the cost.
 
@@ -77,7 +82,7 @@ remaining time from their saved deadlines. This is not a safety-critical alarm.
 
 ## Try Mac voice
 
-Open [the companion](http://localhost:8780/remote), click **Start conversation**, and
+Open [the companion](http://localhost:8780/remote), choose **This computer**, click **Start conversation**, and
 allow microphone access. Say “Set a timer for two minutes”, wait for confirmation,
 then “cancel it”. Keep [the output display](http://localhost:8780/) open separately.
 Use **End conversation** when done. Mute stops input, not billing or spoken output.
@@ -87,9 +92,10 @@ Keep one companion in use; other tabs identify an active conversation as belongi
 to another tab. Hidden idle pages release update streams, while the voice-owning tab
 stays connected. Reload after frontend changes, once your conversation has ended.
 
-Only the Mac mic/speakers are used now. Long-term, the Mirror's own mic and speakers
-will replace that adapter; Android 6.0.1 remains the display target. Exploring Android
-7 in `mirror-mirror` is optional later work, not a dependency. See [voice UX and testing](docs/VOICE.md).
+For the Mirror's mic/speakers, select **Mirror · USB** after installing the native
+bridge and setting up both USB tunnels. See [setup and current limits](docs/MIRROR-AUDIO.md).
+Android 6.0.1 remains supported; Android 7 is not required. Mirror mode is currently
+half-duplex: wait for replies to finish before speaking. See [voice UX](docs/VOICE.md).
 
 ## API setup and remaining connections
 

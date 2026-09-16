@@ -6,6 +6,7 @@
 [data-phase=error] .voice-orb{background:#e4a891}[data-phase=muted] .voice-orb{background:#8c8980}
 .voice-controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.voice-card audio{display:block;width:100%;max-width:330px;height:32px;margin-top:18px}
 #voice-audio[hidden]{display:none}
+#voice-device{background:#17261e;color:#e1ebe3;border:1px solid #607865;border-radius:8px;padding:10px 14px;margin:6px 0 6px 10px;font:inherit}
 .assistant-card{border-color:#607865;background:transparent}.assistant-card .assistant-message{font-size:22px;margin:0;line-height:1.4}.assistant-options{padding-left:28px;line-height:1.5}.assistant-options li{padding:8px 10px;margin:8px 0;border-bottom:1px solid #34453a;font-size:20px}.mirror-display .assistant-options li{font-size:24px;color:#d9e5dc}.mirror-display .assistant-card{background:#000}
 button:disabled{opacity:.4;cursor:default}.mirror-display{background:#000}.mirror-display article{background:#000;border-color:#26322b}.mirror-display #clock{font-size:95px;font-size:clamp(68px,9vw,115px)}
 .mirror-voice{position:fixed;right:6%;bottom:5%;font-size:12px;color:#9faf9f;max-width:65%}.mirror-voice.off{display:none}

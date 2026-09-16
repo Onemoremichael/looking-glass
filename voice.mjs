@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { SidebandWS } from 'openai/resources/live/sideband/ws';
+import { LiveWS } from 'openai/resources/live/ws';
 import { randomUUID } from 'node:crypto';
 import { ApiBudget } from './api-budget.mjs';
 import { VoiceTools } from './voice-tools.mjs';
@@ -8,6 +9,9 @@ import { liveInstructions } from './prompts/live-instructions.mjs';
 import { analyzeTimerIntent, TIMER_QUIET_MS } from './timer-intent.mjs';
 import {analyzeQuickAction} from './quick-actions.mjs';
 import {weatherIntent} from './weather.mjs';
+import {trackTaskProgress} from './task-progress.mjs';
+import {savedViewIntent} from './weather-composition.mjs';
+import {assistantFailureMessage} from './agent-recovery.mjs';
 
 export class Voice {
   constructor({ session, budgetPath, publish = () => {}, clientFactory, attachFactory, telemetry=noTelemetry, assistant, fastTimers=process.env.OPENAI_TIMER_FAST_PATH!=='0', learnedFast=process.env.OPENAI_LEARNED_FAST_PATH!=='0' } = {}) {
@@ -24,19 +28,22 @@ export class Voice {
     if(phase!==this.state.phase)this.active?.trace?.event('phase',{phase});
     this.state = { ...this.state, phase, detail }; this.publish(this.state);
   }
-  async start(sdp) {
+  async start(sdp, mirror=null) {
     if (this.active || this.blocked) throw Error('A voice session is active or needs finalization review.');
-    if (typeof sdp !== 'string' || !sdp.startsWith('v=0') || sdp.length > 60000) throw Error('Invalid SDP offer');
+    if (!mirror && (typeof sdp !== 'string' || !sdp.startsWith('v=0') || sdp.length > 60000)) throw Error('Invalid SDP offer');
+    if(mirror&&!mirror.status().connected)throw Error('Mirror audio bridge is not connected');
     const client = this.clientFactory();
-    const a = this.active = { token:randomUUID(), client, budgetId:this.budget.reserve(), tools:new VoiceTools(this.session),
+    const a = this.active = { token:randomUUID(), client, budgetId:this.budget.reserve(mirror?'live-mirror':'live-webrtc'), tools:new VoiceTools(this.session),
       transcript:[], seen:new Set(), delegations:new Set(), acknowledged:new Set(), fastReceipts:[], cursor:0, lastInput:0, lastOutput:0, lastBeat:Date.now(), started:Date.now(), closing:false, finalized:false };
     a.trace=this.telemetry.start('voice.session');a.startupTrace=this.telemetry.start('voice.startup',{},a.trace);
+    a.mirror=mirror;this.state.device=mirror?'mirror':'mac';
     this.state.muted = false; this.update('connecting','Connecting to GPT-Live-1');
     a.lease = setInterval(() => {
       const reason=Date.now()-a.started > 180000 ? 'duration_limit':Date.now()-a.lastBeat > 20000 ? 'lease_expired':null;
       if(reason){a.trace.event('watchdog',{reason});void this.stop(a.token,reason);}
     },1000);
     try {
+      if(mirror)return await this.startMirror(a);
       const result = await client.live.create({
         session:{ model:'gpt-live-1', store:false, audio:{output:{voice:'marin'}}, delegation:{type:'client'},
           client:{data_channel:{allowed_client_events:['session.close','session.input_audio.mute','session.input_audio.unmute'],allowed_server_events:'all'}},
@@ -64,6 +71,27 @@ export class Voice {
       throw Error(error?.code === 'credit_balance_exhausted' ? 'API credits exhausted' : 'Voice startup failed. Check server configuration and API access.');
     }
   }
+  async startMirror(a){
+    a.ws=this.primaryFactory?this.primaryFactory(a.client):new LiveWS(a.client,{reconnect:null,handshakeTimeout:10000});
+    a.ws.on('event',e=>{this.event(a,e);if(e.type==='session.output_audio.delta'&&!a.closing){try{a.mirror.output(e.delta);}catch{void this.stop(a.token,'audio_backpressure');}}});
+    a.ws.on('error',()=>void this.stop(a.token,'transport_error'));
+    a.ws.socket.on('close',()=>{if(!a.finalized&&!a.closing)void this.stop(a.token,'transport_error');});
+    a.onAudio=data=>{if(!a.closing&&a.ws.socket.readyState===1)a.ws.send({type:'session.input_audio.append',audio:data.toString('base64')});};
+    a.onDisconnect=()=>void this.stop(a.token,'mirror_disconnected');
+    a.mirror.on('disconnect',a.onDisconnect);a.mirror.on('fault',a.onDisconnect);
+    await new Promise((resolve,reject)=>{
+      const timeout=setTimeout(()=>finish(Error('Mirror voice startup timed out')),15000);
+      const event=e=>{if(e.type==='session.started'){a.id=e.session.id;finish();}if(e.type==='session.closed'||e.type==='error')finish(Error('Mirror voice startup failed'));};
+      const close=()=>finish(Error('Mirror voice connection closed'));
+      const finish=error=>{clearTimeout(timeout);a.ws.off('event',event);a.ws.socket.off('close',close);error?reject(error):resolve();};
+      a.ws.on('event',event);a.ws.socket.on('close',close);
+      a.ws.send({type:'session.start',session:{model:'gpt-live-1',store:false,audio:{format:{type:'audio/pcm',rate:16000},output:{voice:'marin'}},delegation:{type:'client'},instructions:liveInstructions}});
+    });
+    if(a.closing)throw Error('Connection cancelled');
+    a.mirror.on('audio',a.onAudio);a.mirror.start();a.lastBeat=Date.now();
+    a.startupTrace.end({outcome:'ok'});this.update('listening','Mirror microphone · listening');
+    return {token:a.token,device:'mirror',maxSeconds:180};
+  }
   event(a,e) {
     if (a !== this.active) return;
     if (e.type === 'session.closed') {
@@ -86,7 +114,14 @@ export class Voice {
       this.telemetry.transcript(a.trace,'assistant',e.delta);
     }
     if (e.type === 'session.input_transcript.delta') {
-      if(a.job){a.job.controller.abort();a.job=null;a.workTrace?.end({outcome:'cancelled'});a.workTrace=this.telemetry.start('voice.delegation',{},a.trace);}
+      if(typeof e.delta!=='string'||!e.delta.trim())return;
+      // Freeze application writes immediately, but wait for a settled utterance
+      // before throwing away paid planning. A backchannel is not a new task.
+      if(a.job&&!a.job.inputGate){
+        const job=a.job;
+        job.inputGate=new Promise(resolve=>{job.releaseInput=resolve;});
+        job.controller.signal.addEventListener('abort',job.releaseInput,{once:true});
+      }
       this.telemetry.transcript(a.trace,'user',e.delta);
       a.transcript.push({ text:e.delta, start:e.start_ms, end:e.end_ms });
       a.lastInput = Date.now();
@@ -103,6 +138,13 @@ export class Voice {
         this.reconcileTimer(a,e.delegation.id);
         return;
       }
+      if(a.job){
+        // Live can hand off again while the same work is in progress. Change
+        // the reply destination, not the work; new speech is classified below.
+        a.job.id=e.delegation.id;a.pending=e.delegation.id;
+        if(a.job.inputGate)this.schedule(a);
+        return;
+      }
       if (a.pending) {a.job?.controller.abort();a.job=null;this.reply(a,a.pending,'A newer request superseded this one; no action was taken.');a.workTrace?.end({outcome:'superseded'});}
       a.workTrace=this.telemetry.start('voice.delegation',{},a.trace);
       a.pending = e.delegation.id; this.update('thinking','Checking your request'); this.schedule(a);
@@ -117,6 +159,8 @@ export class Voice {
     }catch{a.trace.event('transport.error',{error_code:'timer_context_failed'});}
   }
   fastAction(text){
+    const saved=savedViewIntent(text,this.session.state,this.session.now());
+    if(saved)return {action:saved,source:'learned',template:'weather_view',reason:'matched'};
     const forecast=weatherIntent(text,this.session.state.weather);
     if(forecast)return {action:forecast,source:'builtin',template:'get_weather',reason:'matched'};
     const timer=analyzeTimerIntent(text);
@@ -127,6 +171,7 @@ export class Voice {
   scheduleTimer(a){
     clearTimeout(a.fastWork);
     a.fastFallbackReason=null;
+    if(a.job)return;
     if(!this.fastTimers){a.fastFallbackReason='disabled';return;}
     const from=a.cursor,to=a.transcript.length;
     const text=a.transcript.slice(from,to).map(t=>t.text).join('');
@@ -137,7 +182,7 @@ export class Voice {
     if(!route.action){a.fastFallbackReason=route.reason;return;}
     const revision=this.session.state.revision;
     a.fastWork=setTimeout(()=>{
-      if(a.closing||a!==this.active||a.cursor!==from||a.transcript.length!==to)return;
+      if(a.closing||a!==this.active||a.job||a.cursor!==from||a.transcript.length!==to)return;
       if(revision!==this.session.state.revision){a.fastFallbackReason='state_changed';return;}
       const checked=this.fastAction(text);
       if(!checked.action||JSON.stringify(checked.action)!==JSON.stringify(route.action)){a.fastFallbackReason=checked.reason;return;}
@@ -171,9 +216,28 @@ export class Voice {
   schedule(a) {
     clearTimeout(a.work);
     // Deltas are not completed turns. Wait for quiet before planning; later speech
-    // cancels the in-flight plan. The legacy parser still accepts only whole requests.
+    // holds writes until a settled correction can replace the in-flight plan.
     a.work = setTimeout(() => {
       if (a.closing || a !== this.active || !a.pending) return;
+      if(a.job){
+        const job=a.job;
+        if(!job.inputGate)return;
+        const tail=a.transcript.slice(job.to).map(t=>t.text).join('').trim();
+        if(/^(?:ok(?:ay)?|thanks(?: you)?|thank you|uh huh|mm[ -]?hmm)[.!?,\s]*$/i.test(tail)){
+          job.to=a.transcript.length;
+          job.controller.signal.removeEventListener('abort',job.releaseInput);
+          job.inputGate=null;job.releaseInput();return;
+        }
+        a.job=null;job.controller.abort();a.workTrace?.end({outcome:'superseded'});
+        if(/^(?:stop|cancel|never mind|nevermind|forget it|cancel that)(?: please)?[.!?,\s]*$/i.test(tail)){
+          a.cursor=a.transcript.length;a.pending=null;a.workTrace=null;
+          this.reply(a,job.id,'Stopped that request.');this.update('listening','');return;
+        }
+        // Preserve the outcome being requested; e.g. "Warmer" refines next
+        // week's forecast rather than becoming a disconnected one-word task.
+        a.refinedText=job.text+'\nUser follow-up: '+tail;
+        a.workTrace=this.telemetry.start('voice.delegation',{},a.trace);
+      }
       if(a.cursor===a.transcript.length&&a.fastReceipts.length){
         this.reconcileTimer(a,a.pending);a.pending=null;
         a.workTrace?.end({outcome:'completed',duplicate:true});a.workTrace=null;
@@ -199,33 +263,33 @@ export class Voice {
   }
   async runAssistant(a) {
     const id=a.pending,from=a.cursor,to=a.transcript.length;
-    const job=a.job={controller:new AbortController(),id};
-    const text=a.transcript.slice(from,to).map(t=>t.text).join('');
+    const text=a.refinedText||a.transcript.slice(from,to).map(t=>t.text).join('');a.refinedText=null;
+    const job=a.job={controller:new AbortController(),id,to,text};
+    const beforeCommit=async()=>{
+      while(job.inputGate&&!job.controller.signal.aborted)await job.inputGate;
+      if(job.controller.signal.aborted||a.job!==job||a.closing)throw Error('Request cancelled');
+    };
     const workTrace=a.workTrace;
-    // One factual progress cue for a genuinely pending request, never startup filler.
-    const acknowledgement=setTimeout(()=>{
-      if(a.job!==job||job.controller.signal.aborted||a.closing||a!==this.active||a.acknowledged.has(id)||a.lastOutput>=a.lastInput)return;
-      try {
-        if(this.reply(a,id,'Still working on your request. No result is ready yet.')){
-          a.acknowledged.add(id);workTrace?.event('waiting.acknowledgment',{since_last_fragment_ms:Date.now()-a.lastInput});
-        }
-      }catch{/* A progress cue must not fail the action or escape the timer callback. */}
-    },1500);
-    job.controller.signal.addEventListener('abort',()=>clearTimeout(acknowledgement),{once:true});
+    const progress=trackTaskProgress({signal:job.controller.signal,lastSpeech:()=>a.lastOutput,
+      isCurrent:()=>a.job===job&&!job.inputGate&&!a.closing&&a===this.active,
+      send:content=>{try{if(this.reply(a,job.id,content))workTrace?.event('waiting.acknowledgment',{since_last_fragment_ms:Date.now()-a.lastInput});}catch{/* Progress must not fail the action. */}}});
     try {
-      const result=await this.assistant.execute(a.token+':'+id+':'+to,text,{signal:job.controller.signal,trace:workTrace});
+      const result=await this.assistant.execute(a.token+':'+id+':'+to,text,{signal:job.controller.signal,trace:workTrace,onProgress:progress.update,beforeCommit});
+      if(job.inputGate)await beforeCommit();
       if(a.job!==job||job.controller.signal.aborted||a.closing||a!==this.active)return;
-      a.cursor=to;a.pending=null;a.job=null;
+      a.cursor=job.to;a.pending=null;a.job=null;
       workTrace?.end({outcome:result.status});a.workTrace=null;
-      a.toolFinishedAt=Date.now();this.reply(a,id,result.message);
-      this.update(result.status==='needs_input'?'needs_input':'listening',result.status==='needs_input'?result.message:'');
-    }catch{
-      workTrace?.end({outcome:job.controller.signal.aborted?'cancelled':'error'});
+      a.toolFinishedAt=Date.now();this.reply(a,job.id,result.message);
+      this.update(result.status==='needs_input'&&!result.viewOffer?'needs_input':'listening',result.status==='needs_input'&&!result.viewOffer?result.message:'');
+    }catch(error){
+      // Do not report failure over a correction that is still being spoken.
+      if(job.inputGate&&!job.controller.signal.aborted)try{await beforeCommit();}catch{}
+      workTrace?.end({outcome:job.controller.signal.aborted?'cancelled':'error',error_code:error?.code||'tool_failed'});
       if(a.job!==job||a.closing||a!==this.active)return;
-      a.cursor=to;a.pending=null;a.job=null;a.workTrace=null;
-      const message='I could not safely complete that request. Nothing was changed. Please try again; the display may have changed or the assistant connection failed.';
-      this.reply(a,id,message);this.update('needs_input',message);
-    }finally{clearTimeout(acknowledgement);}
+      a.cursor=job.to;a.pending=null;a.job=null;a.workTrace=null;
+      const message=assistantFailureMessage(error);
+      this.reply(a,job.id,message);this.update('needs_input',message);
+    }finally{progress.stop();}
   }
   reply(a,id,content) {
     if (!a.closing && a.ws?.socket.readyState === 1) {a.ws.send({type:'session.commentary.append',delegation_id:id,content});return true;}
@@ -250,7 +314,7 @@ export class Voice {
   async stop(token,reason='user') {
     const a = this.active; if (!a || (token && token !== a.token)) return;
     if (a.closing) return a.stopping;
-    a.closing = true; a.job?.controller.abort(); clearTimeout(a.work); clearTimeout(a.fastWork); clearInterval(a.lease); this.update('stopping','Closing voice session');
+    a.closing = true; a.mirror?.stop(); a.job?.controller.abort(); clearTimeout(a.work); clearTimeout(a.fastWork); clearInterval(a.lease); this.update('stopping','Closing voice session');
     a.workTrace?.end({outcome:'cancelled'});a.workTrace=null;
     a.closeTrace=this.telemetry.start('voice.close',{reason},a.trace);
     a.stopping = (async () => {
@@ -269,6 +333,7 @@ export class Voice {
     return a.stopping;
   }
   cleanup(a) {
+    if(a.mirror){a.mirror.stop();if(a.onAudio)a.mirror.off('audio',a.onAudio);if(a.onDisconnect){a.mirror.off('disconnect',a.onDisconnect);a.mirror.off('fault',a.onDisconnect);}}
     a.job?.controller.abort();
     a.startupTrace?.end({outcome:a.finalized?'ok':'cancelled'});
     a.workTrace?.end({outcome:'cancelled'});

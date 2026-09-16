@@ -89,3 +89,9 @@ test('idle companion distinguishes another tab from its own microphone',async t=
   await f.el('voice-start').onclick();f.el('voice-stop').onclick();await flush();
   assert.deepEqual(f.activity.map(e=>e.detail),[true,false]);
 });
+test('Mirror mode never asks for a browser microphone or opens WebRTC; mute and end use server controls',async t=>{
+  const f=fixture(t,{microphone:new Promise(()=>{})});f.el('voice-device').value='mirror';await f.el('voice-start').onclick();
+  assert.equal(f.peers.length,0);assert.equal(f.el('voice-status').textContent,'Mirror microphone · listening');
+  f.el('voice-mute').onclick();await flush();assert.ok(f.posts.includes('/api/voice/mute'));
+  f.el('voice-stop').onclick();await flush();assert.ok(f.posts.includes('/api/voice/stop'));assert.equal(f.el('voice-device').disabled,false);
+});

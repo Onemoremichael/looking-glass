@@ -4,6 +4,7 @@ const stop = document.getElementById('voice-stop');
 const mute = document.getElementById('voice-mute');
 const status = document.getElementById('voice-status');
 const audio = document.getElementById('voice-audio');
+const device = document.getElementById('voice-device');
 let run = null;
 function ownVoice(active){window.dispatchEvent(new CustomEvent('glass-voice-active',{detail:active}));}
 async function post(path,body) {
@@ -37,7 +38,7 @@ function release(r) {
   clearInterval(r.beat); clearTimeout(r.deadline); clearTimeout(r.readyTimeout);
   r.stream?.getTracks().forEach(t=>t.stop()); r.channel?.close(); r.peer?.close();
   if(r.context && r.context.state!=='closed') void r.context.close().catch(()=>{});
-  if(run===r) { audio.srcObject=null; audio.hidden=true;run=null; ownVoice(false); start.disabled=false; stop.disabled=true; mute.disabled=true; mute.textContent='Mute microphone'; mute.setAttribute('aria-pressed','false'); }
+  if(run===r) { device.disabled=false;audio.srcObject=null; audio.hidden=true;run=null; ownVoice(false); start.disabled=false; stop.disabled=true; mute.disabled=true; mute.textContent='Mute microphone'; mute.setAttribute('aria-pressed','false'); }
 }
 async function end() {
   const r=run; if(!r || r.closing)return;
@@ -54,8 +55,20 @@ async function end() {
 }
 start.onclick=async()=>{
   if(run)return;
+  if(device.value==='mirror'){
+    const r=run={ready:false,muted:false,closing:false,mirror:true};device.disabled=true;start.disabled=true;stop.disabled=false;ownVoice(true);
+    paint('connecting','Connecting the Mirror microphone and speakers…');
+    try{
+      const result=await post('start',{device:'mirror'});r.token=result.token;
+      if(r.closing||run!==r){await post('stop',{token:r.token});return;}
+      r.ready=true;mute.disabled=false;paint('listening','Mirror microphone · listening');
+      r.beat=setInterval(()=>post('heartbeat',{token:r.token,ready:true,muted:r.muted}).catch(()=>void end()),1000);
+      r.deadline=setTimeout(()=>void end(),175000);
+    }catch(e){if(run===r){release(r);paint('error',e.message);}}
+    return;
+  }
   if(!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) { paint('error','Use a current Mac browser on localhost for voice.'); return; }
-  const r=run={ready:false,muted:false,closing:false}; start.disabled=true; stop.disabled=false; paint('connecting','Allow the Mac microphone to begin.');
+  const r=run={ready:false,muted:false,closing:false}; device.disabled=true;start.disabled=true; stop.disabled=false; paint('connecting','Allow the Mac microphone to begin.');
   ownVoice(true);
   try {
     // Request capture directly from the click. Optional audio metering is not a
@@ -128,6 +141,10 @@ start.onclick=async()=>{
 stop.onclick=()=>void end();
 mute.onclick=()=>{
   const r=run;if(!r?.ready || r.closing)return;
+  if(r.mirror){
+    r.muted=!r.muted;post('mute',{token:r.token,muted:r.muted}).catch(()=>void end());
+    mute.textContent=r.muted?'Unmute microphone':'Mute microphone';mute.setAttribute('aria-pressed',String(r.muted));paint(r.muted?'muted':'listening');return;
+  }
   r.muted=!r.muted;r.stream.getAudioTracks().forEach(t=>t.enabled=!r.muted);
   r.channel.send(JSON.stringify({type:r.muted?'session.input_audio.mute':'session.input_audio.unmute'}));
   mute.textContent=r.muted?'Unmute microphone':'Mute microphone';mute.setAttribute('aria-pressed',String(r.muted));
