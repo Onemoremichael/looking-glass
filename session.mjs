@@ -106,6 +106,7 @@ export class Session {
       for(const a of decision.actions) {
         if(a.action==='get_time'){confirmations.push('It is '+new Date(this.now()).toLocaleTimeString()+'.');continue;}
         this.apply(a.action,a);
+        if(a.action==='open_image'){const j=this.state.imageJobs.find(j=>j.id===a.jobId);confirmations.push('Artwork '+j.spec.title+': '+j.status+'. '+j.detail);continue;}
         if(a.action==='playroom_turn'){confirmations.push(this.state.playroom.prompt);continue;}
         if(['compose_research','open_research_view','research_page'].includes(a.action)){confirmations.push(this.state.research.summary+' '+(this.state.research.caveat||'')+' Research checked '+new Date(this.state.research.fetchedAt).toISOString()+'. '+(this.state.research.savedId?'The recipe is saved for reuse.':'Recipe not saved: library full.')+' Page '+(this.state.research.page+1)+' of '+Math.ceil(this.state.research.cards.length/2)+'.');continue;}
         if(a.action==='compose_weather'||a.action==='open_weather_view'){confirmations.push(compositionSummary(this.state.weather.composition.data));if(a.action==='compose_weather')confirmations.push(this.state.weather.composition.savedId?'This layout is saved automatically for reuse; do not ask to save it.':'This view was not saved: '+this.state.weather.composition.saveReason+'.');continue;}
@@ -141,6 +142,10 @@ export class Session {
   apply(action, args) {
     const s = this.state;
     if(s.playroom&&action!=='playroom_turn')throw Error('Exit playroom from the companion before using other actions');
+    if(action==='open_image'){
+      if(!(s.imageJobs||[]).some(j=>j.id===args.jobId))throw Error('Saved image not found');
+      s.panel='studio';s.imageJobId=args.jobId;return;
+    }
     if(action==='playroom_turn'){
       if(!s.playroom||args.gameId!==s.playroom.id||args.turn!==s.playroom.turn)throw Error('Game turn changed');
       advanceGame(s.playroom,args.text);return;
@@ -198,7 +203,7 @@ export class Session {
       s.weather.view=args.period;s.weather.composition=null;s.viewOffer=null;s.panel='weather';return;
     }
     if (action === 'show') {
-      if (!['home','time','timers','todos','weather','research','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
+      if (!['home','time','timers','todos','weather','research','studio','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
       s.viewOffer=null;s.panel = args.panel; return;
     }
     if (action === 'start_timer') {

@@ -12,8 +12,12 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    boards, citations, reusable recipes, fresh/cache distinction, voice access.
    Contract and provider checks passed; portrait overflow prompted two-card
    pagination. Final hardware fit and broader semantic reuse remain follow-up.
-2. **Creative studio** — pending: current GPT Image model, bounded paid jobs,
-   persisted assets and reusable creative recipes, generated game artwork.
+2. **Creative studio** — implemented adapter and job foundation: current GPT Image
+   2.5 Sunburst, single-request jobs, progress/cancel/restart handling, persisted
+   PNGs and prompt recipes, local reopening and voice-planner actions. Offline
+   tests and Android portrait fixture rendering pass. Actual provider access,
+   image editing and spoken end-to-end acceptance remain pending. See
+   [image studio](IMAGE-STUDIO.md). Existing game artwork is generated separately.
 3. **Playroom** — adult-rehearsal foundation implemented: four generated animal
    assets, conservative answer judgment with uncertainty, retry/hint/skip state,
    bounded bear choices and audio-reactive animation. Hardware animal display was

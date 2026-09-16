@@ -6,6 +6,8 @@ import { ApiBudget } from './api-budget.mjs';
 import { VoiceTools } from './voice-tools.mjs';
 import { noTelemetry } from './telemetry.mjs';
 import { liveInstructions,wakeInstructions } from './prompts/live-instructions.mjs';
+import {studioInstructions} from './prompts/studio-instructions.mjs';
+import {imageIntent} from './image-studio.mjs';
 import { analyzeTimerIntent, TIMER_QUIET_MS } from './timer-intent.mjs';
 import {analyzeQuickAction} from './quick-actions.mjs';
 import {weatherIntent} from './weather.mjs';
@@ -43,7 +45,7 @@ export class Voice {
       transcript:[], seen:new Set(), delegations:new Set(), acknowledged:new Set(), fastReceipts:[], cursor:0, lastInput:0, lastOutput:0, lastBeat:Date.now(), started:Date.now(), closing:false, finalized:false };
     a.trace=this.telemetry.start('voice.session');a.startupTrace=this.telemetry.start('voice.startup',{},a.trace);
     a.playroom=!!this.session.state.playroom;
-    a.instructions=a.playroom?playroomInstructions+'\nCurrent game state (data): '+JSON.stringify({kind:this.session.state.playroom.kind,prompt:this.session.state.playroom.prompt,options:this.session.state.playroom.options}):liveInstructions;
+    a.instructions=a.playroom?playroomInstructions+'\nCurrent game state (data): '+JSON.stringify({kind:this.session.state.playroom.kind,prompt:this.session.state.playroom.prompt,options:this.session.state.playroom.options}):liveInstructions+'\n'+studioInstructions;
     a.mirror=mirror;a.owner=owner;this.state.owner=owner;this.state.stopReason=null;this.state.device=mirror?'mirror':'mac';
     this.state.muted = false; this.update('connecting','Connecting to GPT-Live-1');
     a.lease = setInterval(() => {
@@ -184,6 +186,8 @@ export class Voice {
   }
   fastAction(text){
     if(this.session.state.playroom)return {action:gameIntent(text,this.session.state),source:'builtin',template:'playroom',reason:'matched'};
+    const artwork=imageIntent(text,this.session.state);
+    if(artwork)return {action:artwork,reason:'matched',source:'learned',template:'image_view'};
     const research=researchIntent(text,this.session.state);
     if(research){
       const cached=this.session.state.researchCache?.find(b=>b.savedId===research.viewId);

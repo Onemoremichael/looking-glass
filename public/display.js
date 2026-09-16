@@ -13,8 +13,9 @@
   }
   function esc(s){return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function render(state){
-    lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':state.panel==='research'?' research-open':state.panel==='playroom'?' playroom-open':'');
+    lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':state.panel==='research'?' research-open':state.panel==='playroom'?' playroom-open':state.panel==='studio'?' studio-open':'');
     var html='';
+    if(state.panel==='studio')html=window.GlassStudio.render(state,false);
     if(state.panel==='playroom')html=window.GlassPlayroom.render(state.playroom);
     if(state.panel==='research')html=window.GlassResearch.render(state.research,false);
     if(state.panel==='weather')html='<div id="weather-content">'+window.GlassWeather.render(state.weather)+'</div>';

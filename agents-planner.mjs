@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { plannerDecisionSchema, validateDecision } from './assistant-contract.mjs';
 import { assistantInstructions } from './prompts/assistant-instructions.mjs';
+import {studioInstructions} from './prompts/studio-instructions.mjs';
 import {closeAgentSession,recoveryError} from './agent-recovery.mjs';
 import {validateResearchBoard} from './research-board.mjs';
 import {verifyResearchSources} from './research-sources.mjs';
@@ -56,7 +57,7 @@ export class AgentsPlanner {
     const planning=this.telemetry?.start('agent.planning',{},trace);
     try {
       stream=await this.client.beta.agents.sessions.create({
-        agent:{model:this.model,instructions:assistantInstructions,reasoning:{effort:this.effort},tools:[{type:'web_search',mode:'live',context_size:'medium'}],multi_agent:{enabled:false},text:{format:{type:'json_schema',schema:plannerDecisionSchema},verbosity:'low'}},
+        agent:{model:this.model,instructions:assistantInstructions+'\n'+studioInstructions,reasoning:{effort:this.effort},tools:[{type:'web_search',mode:'live',context_size:'medium'}],multi_agent:{enabled:false},text:{format:{type:'json_schema',schema:plannerDecisionSchema},verbosity:'low'}},
         environment:{type:'none'},input:JSON.stringify(context),stream:true,
       },{signal:combined});
       for await(const event of stream) {

@@ -63,4 +63,17 @@ export class ApiBudget {
       } else r.status = 'unconfirmed';
     });
   }
+  finishImage(id,{received,usage}){
+    this.change(b=>{
+      const r=b.runs.find(r=>r.id===id);if(!r||r.kind!=='image-generation')throw Error('Unknown image reservation');
+      r.status=received?'closed':'unconfirmed';r.estimatedUSD=r.reservedUSD;
+      // Text-only input at $5/M, image output at $30/M; never refund the allowance.
+      // This ledger is conservative accounting, not a provider-side spending cap.
+      if(usage&&Number.isFinite(usage.input_tokens)&&usage.input_tokens>=0&&Number.isFinite(usage.output_tokens)&&usage.output_tokens>=0){
+        r.tokens={input:usage.input_tokens,output:usage.output_tokens};
+        r.estimatedUSD=Math.max(r.reservedUSD,(usage.input_tokens*5+usage.output_tokens*30)/1e6);
+        if(!received)r.reservedUSD=r.estimatedUSD;
+      }
+    });
+  }
 }
