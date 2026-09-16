@@ -8,7 +8,7 @@
     x.onload=function(){if(x.status!==200)error();};x.onerror=error;x.ontimeout=error;x.send(JSON.stringify(body));
   }
   function render(){
-    var panels=['home','time','timers','todos','weather','research','studio','calendar','tasks','saved'];
+    var panels=['home','time','timers','todos','weather','research','studio','workflows','calendar','tasks','saved'];
     document.getElementById('nav').innerHTML=panels.map(function(p){return '<button data-panel="'+p+'" aria-current="'+(p===state.panel)+'">'+({todos:'To-dos',tasks:'Requests',saved:'Saved views'}[p]||p.charAt(0).toUpperCase()+p.slice(1))+'</button>';}).join('');
     var message=document.getElementById('message');
     message.textContent=state.assistant?'':state.message;message.hidden=!!state.assistant;
@@ -18,6 +18,7 @@ if(state.panel==='home')html='<div class="grid"><article><span class="tag">WORKI
     if(state.panel==='weather')html='<div id="weather-content">'+window.GlassWeather.render(state.weather)+'</div>';
     if(state.panel==='playroom')html=window.GlassPlayroom.render(state.playroom);
     if(state.panel==='studio')html=window.GlassStudio.render(state,true);
+    if(state.panel==='workflows')html=window.GlassWorkflow.render(state,true);
     if(state.panel==='research')html=window.GlassResearch.render(state.research,true);
     if(state.panel==='calendar')html='<article><span class="tag">NOT CONNECTED</span><h2>A clear view of your day.</h2><p>Connect a calendar explicitly before we can review events. No account access has been requested.</p></article>';
     if(state.panel==='timers'){
@@ -37,7 +38,7 @@ if(state.panel==='home')html='<div class="grid"><article><span class="tag">WORKI
       html+=state.recipes.map(function(r){return '<article><span class="tag">CONFIGURATION ONLY · SOURCE NOT CONNECTED</span><h3>'+esc(r.title)+'</h3><p>'+esc(r.preferences)+'</p><p class="note">Agenda component · refresh on open when connected · no scheduled work'+(r.parentId?' · forked variation':'')+'</p>'+button('open_recipe',r.id,'Open')+'<details><summary>Create a variation</summary><form data-fork="'+esc(r.id)+'"><label>New name<input name="title" maxlength="80" required></label><label>Preferences<textarea name="preferences" maxlength="600" required>'+esc(r.preferences)+'</textarea></label><button>Save variation</button></form></details></article>';}).join('');
     }
     if(state.panel==='saved')html=(state.weatherViews||[]).map(function(v){return '<article><span class="tag">REUSABLE WEATHER VIEW</span><h3>'+esc(v.spec.title)+'</h3><p>'+esc(v.spec.range.replace(/_/g,' '))+' · '+esc(v.spec.focus)+' focus</p>'+button('open_weather_view',v.id,'Open forecast')+'</article>';}).join('')+html;
-    document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html+window.GlassSurface.saveOffer(state);window.GlassWeatherControls.render(state);tick();window.GlassSurface.rendered(state);
+    document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html+window.GlassWorkflow.strip(state)+window.GlassSurface.saveOffer(state);window.GlassWeatherControls.render(state);tick();window.GlassSurface.rendered(state);window.dispatchEvent(new CustomEvent('workflow-state',{detail:state}));
   }
   function tick(){
     var d=new Date();document.getElementById('clock').textContent=d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});

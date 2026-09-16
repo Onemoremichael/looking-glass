@@ -5,14 +5,16 @@ import {savedViewIntent,viewOfferCurrent} from './weather-composition.mjs';
 import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {gameIntent} from './playroom.mjs';
 import {imageIntent} from './image-studio.mjs';
+import {workflowIntent} from './workflows.mjs';
 export class Assistant {
   constructor({session,planner,surfaces,telemetry,weather,studio}){Object.assign(this,{session,planner,surfaces,telemetry,weather,studio});this.inflight=new Map();}
-  execute(id,utterance,{signal,trace,onProgress=()=>{},beforeCommit=async()=>{}}={}) {
+  execute(id,utterance,{signal,trace,onProgress=()=>{},beforeCommit=async()=>{},workflowContext=null,guardDecision=()=>{}}={}) {
+    const workflowReceipt=(this.session.state.workflowReceipts||[]).find(r=>r.id===id);if(workflowReceipt)return Promise.resolve(workflowReceipt.result);
     const prior=(this.session.state.assistantReceipts||[]).find(r=>r.id===id);if(prior)return Promise.resolve(prior.result);
     if(this.inflight.has(id))return this.inflight.get(id);
-    const work=this.run(id,utterance,{signal,trace,onProgress,beforeCommit}).finally(()=>this.inflight.delete(id));this.inflight.set(id,work);return work;
+    const work=this.run(id,utterance,{signal,trace,onProgress,beforeCommit,workflowContext,guardDecision}).finally(()=>this.inflight.delete(id));this.inflight.set(id,work);return work;
   }
-  async run(id,utterance,{signal,trace,onProgress,beforeCommit}) {
+  async run(id,utterance,{signal,trace,onProgress,beforeCommit,workflowContext,guardDecision}) {
     if(typeof utterance!=='string'||!utterance.trim()||utterance.length>4000)return {status:'needs_input',message:'I did not catch a request. Please say it again.'};
     if(this.session.state.playroom){
       const revision=this.session.state.revision,action=gameIntent(utterance,this.session.state);
@@ -20,7 +22,7 @@ export class Assistant {
       return this.session.commitDecision(id,revision,{status:'execute',outcome:'Continue game',message:'Game answer',actions:[action],options:[],selectedOptionId:null},'');
     }
     let researchRequest=null;
-    let quick=imageIntent(utterance,this.session.state)||researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
+    let quick=(!workflowContext&&this.workflows?workflowIntent(utterance,this.session.state):null)||imageIntent(utterance,this.session.state)||researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
     if(quick?.action==='open_research_view'){
       const cached=this.session.state.researchCache?.find(b=>b.savedId===quick.viewId);
       if(quick.refresh||!cached||this.session.now()-cached.fetchedAt>=RESEARCH_FRESH_MS){
@@ -31,6 +33,8 @@ export class Assistant {
       const revision=this.session.state.revision;
       await beforeCommit();
       if(signal?.aborted)throw Error('Request cancelled');
+      guardDecision({status:'execute',actions:[quick]});
+      if(quick.action.endsWith('_workflow'))return this.workflows.handle(id,quick,{revision,utterance});
       return this.session.commitDecision(id,revision,{status:'execute',outcome:'Use a saved view',message:'Requested',actions:[quick],options:[],selectedOptionId:null},utterance);
     }
     if(this.weather&&(/weather|forecast|rain|week|weekend/i.test(utterance)||this.session.state.panel==='weather')){
@@ -60,7 +64,7 @@ export class Assistant {
       state.todos.forEach((t,i)=>targets.set('todo_'+(i+1),t.id));
       const reverse=new Map([...targets].map(([alias,id])=>[id,alias]));
       const aliased=JSON.parse(JSON.stringify({
-        utterance,capabilities,now:new Date(this.session.now()).toISOString(),timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,
+        utterance,capabilities,workflowContext,workflows:(state.workflows||[]).map(r=>({id:r.id,title:r.title,outcome:r.outcome,status:r.status,detail:r.detail,recipeId:r.recipeId,inputQuestions:r.inputQuestions,steps:r.steps.map(s=>({id:s.id,title:s.title,kind:s.kind,status:s.status,detail:s.detail,options:s.options}))})),workflowAvailable:!!this.workflows,now:new Date(this.session.now()).toISOString(),timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,
         state:{revision,panel:state.panel,timers:state.timers,todos:state.todos},
         weather:weatherView(state.weather,this.session.now()),
         viewOffer:viewOfferCurrent(state,this.session.now())?state.viewOffer:null,
@@ -68,7 +72,7 @@ export class Assistant {
         reusableViews:state.reusableViews||[],researchRequest,research:state.research||null,
         imageJobs:state.imageJobs||[],imageStudio:{available:!!this.studio,asynchronous:true,autoSave:true,editsSupported:false},
         researchCache:(state.researchCache||[]).map(b=>({viewId:b.savedId,fresh:this.session.now()-b.fetchedAt<RESEARCH_FRESH_MS})),
-        durability:{autoSave:true,supportedKinds:['weather','research'],stores:'validated configuration, not data or action replays'},
+        durability:{autoSave:true,supportedKinds:['weather','research','workflow'],stores:'validated configuration, not data or action replays'},
         presentation:view,surfaces:reports,history:state.assistantHistory||[],resolvedSelection,
       }),(key,value)=>typeof value==='string'&&reverse.has(value)?reverse.get(value):value);
       const decision=validateDecision(await this.planner.decide({
@@ -78,6 +82,7 @@ export class Assistant {
       // represented as a fresh result. Tell the user to request refresh if the
       // planner did not follow the supplied cache state.
       if(signal?.aborted)throw Error('Request cancelled');
+      guardDecision(decision);
       if(decision.selectedOptionId&&targets.has(decision.selectedOptionId))decision.selectedOptionId=targets.get(decision.selectedOptionId);
       for(const option of decision.options)if(targets.has(option.id))option.id=targets.get(option.id);
       if(decision.selectedOptionId&&!view.clarification?.options.some(o=>o.id===decision.selectedOptionId))throw Error('Unknown choice');
@@ -92,6 +97,11 @@ export class Assistant {
       }
       await beforeCommit();
       if(signal?.aborted)throw Error('Request cancelled');
+      if(decision.actions.some(a=>/^(?:create|reuse|open|pause|cancel|continue)_workflow$|^(?:provide_workflow_inputs|confirm_workflow_step)$/.test(a.action))){
+        if(decision.actions.length!==1||!this.workflows)throw Error('Use one workflow operation at a time');
+        const result=this.workflows.handle(id,decision.actions[0],{revision,utterance,resolvedSelection});
+        span?.end({outcome:'completed',action:'assistant'});return result;
+      }
       if(decision.actions.some(a=>['generate_image','cancel_image'].includes(a.action))){
         if(decision.actions.length!==1||!this.studio)throw Error('Use one image operation at a time');
         if(this.session.state.revision!==revision)throw Error('Display changed while deciding');

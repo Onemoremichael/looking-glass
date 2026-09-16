@@ -30,6 +30,7 @@
     rendered:function(state){revision=state.revision;report();},
     saveOffer:function(state){var o=state.viewOffer,c=state.weather&&state.weather.composition;return o&&o.expiresAt>Date.now()&&state.panel==='weather'&&c&&o.compositionId===c.id?'<div class="view-save-offer">'+esc(o.question)+'<small>Say yes to keep the layout, or no for just this time.</small></div>':'';},
     card:function(state){
+      if(window.GlassWorkflow&&window.GlassWorkflow.ownsQuestion(state))return '';
       var a=state.assistant;if(!a||a.status==='execute')return '';
       // Show information the user needs, not a narration of the UI mutation.
       return '<article class="assistant-card" aria-label="Assistant '+(a.status==='clarify'?'question':'answer')+'"><p class="assistant-message">'+esc(a.message)+'</p>'+(a.options.length?'<ol class="assistant-options">'+a.options.map(function(o){return '<li>'+esc(o.label)+'</li>';}).join('')+'</ol><p class="note">Say the option number or name.</p>':'')+'</article>';
