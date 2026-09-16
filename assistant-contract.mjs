@@ -1,21 +1,25 @@
 import {quickActionSchema} from './quick-actions.mjs';
 import {weatherView} from './weather.mjs';
 import {weatherComponents,weatherRanges} from './weather-composition.mjs';
+import {researchBoardSchema,researchView} from './research-board.mjs';
 export const capabilities = {
-  available: ['get_time','get_weather','compose_weather','open_weather_view','save_current_view','resolve_view_offer','show','start_timer','cancel_timer','add_todo','set_todo_done','remove_todo'],
-  limitations: ['Timer alerts are visual only; no audible alarms.', 'Weather is Open-Meteo model data for saved locations only; no radar, severe-weather alerts, or automatic IP location. Set up places/units in companion.', 'No calendar account, web research, music, camera, purchases, messages or research jobs are connected.', 'Home/back returns home, not navigation history.', 'Only the first five to-dos are shown on the mirror; the companion shows all items.'],
+  available: ['get_time','get_weather','compose_weather','open_weather_view','compose_research','open_research_view','research_page','save_current_view','resolve_view_offer','show','start_timer','cancel_timer','add_todo','set_todo_done','remove_todo'],
+  limitations: ['Timer alerts are visual only; no audible alarms.', 'Weather is Open-Meteo model data for saved locations only; no radar, severe-weather alerts, or automatic IP location. Set up places/units in companion.', 'No calendar account, music, camera, purchases or messages are connected. Web research is read-only, on demand, and limited to six displayed cards; no autonomous scheduled research.', 'Home/back returns home, not navigation history.', 'Only the first five to-dos are shown on the mirror; the companion shows all items.'],
 };
 const str = (maxLength=300) => ({type:'string',minLength:1,maxLength});
 const obj = properties => ({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 export const weatherSpecSchema=obj({title:str(60),range:{enum:weatherRanges},startDate:{anyOf:[{type:'null'},str(10)]},endDate:{anyOf:[{type:'null'},str(10)]},focus:{enum:['general','rain','temperature']},components:{type:'array',items:{enum:weatherComponents},maxItems:3}});
 export const actionSchema = {anyOf:[
+  obj({action:{enum:['compose_research']},board:researchBoardSchema}),
+  obj({action:{enum:['open_research_view']},viewId:str(100),refresh:{type:'boolean'}}),
+  obj({action:{enum:['research_page']},direction:{enum:['next','previous']}}),
   obj({action:{enum:['get_time']}}),
   obj({action:{enum:['get_weather']},period:{enum:['now','today','tomorrow','week']},locationId:{anyOf:[{type:'null'},str(100)]}}),
   obj({action:{enum:['compose_weather']},locationId:{anyOf:[{type:'null'},str(100)]},spec:weatherSpecSchema}),
   obj({action:{enum:['open_weather_view']},viewId:str(100)}),
   obj({action:{enum:['resolve_view_offer']},offerId:str(100),choice:{enum:['save','discard']}}),
   obj({action:{enum:['save_current_view']}}),
-  obj({action:{enum:['show']},panel:{enum:['home','time','timers','todos','weather','calendar','tasks','saved']}}),
+  obj({action:{enum:['show']},panel:{enum:['home','time','timers','todos','weather','research','calendar','tasks','saved']}}),
   obj({action:{enum:['start_timer']},seconds:{type:'integer',minimum:1,maximum:86400},label:str(80)}),
   obj({action:{enum:['cancel_timer','remove_todo']},id:str(100)}),
   obj({action:{enum:['add_todo']},text:str()}),
@@ -60,6 +64,8 @@ export function presentation(state,now=Date.now()) {
       tasks:state.panel==='tasks'?state.tasks:[],recipes:state.panel==='saved'?state.recipes:[],
       weatherViews:state.panel==='saved'?(state.weatherViews||[]):[],homeSummary:state.panel==='home'?{savedViews:state.recipes.length+(state.weatherViews||[]).length,requests:state.tasks.filter(t=>t.status!=='cancelled').length,backgroundResearch:false}:null},
     weather:state.panel==='weather'?{...weatherView(state.weather,now),view:state.weather?.view||'now',composition:state.weather.composition||null}:null,
+    research:state.panel==='research'?researchView(state,now):null,
+    researchVisibleCardNumbers:state.panel==='research'&&state.research?state.research.cards.slice((state.research.page||0)*2,(state.research.page||0)*2+2).map((_,i)=>(state.research.page||0)*2+i+1):[],
     viewOffer:state.viewOffer||null,weatherViews:state.weatherViews||[],
     disconnectedPlaceholder:state.panel==='calendar'?'calendar':null,
     clarification:state.assistant?.status==='clarify'?state.assistant:null,

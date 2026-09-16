@@ -98,7 +98,7 @@ test('presentation includes result cards and each surface’s actual saved/reque
 test('Agents API adapter requires completed JSON, cleans its session and accounts for use',async()=>{
   const calls=[],d=decision([{action:'show',panel:'todos'}]);
   const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){yield {type:'agent.session.created',session:{id:'test'}};yield {type:'agent.session.turn.output_text.done',text:JSON.stringify(d)};yield {type:'agent.session.turn.completed',usage:{input_tokens:10,output_tokens:20}};}};
-  const planner=new AgentsPlanner({client:{beta:{agents:{sessions:{create:async body=>{assert.equal(body.environment.type,'none');assert.deepEqual(body.agent.tools,[]);return stream;},delete:async id=>calls.push(id)}}}},budget:{reserve:()=> 'b',finishAgent:(id,result)=>calls.push(result)}});
+  const planner=new AgentsPlanner({client:{beta:{agents:{sessions:{create:async body=>{assert.equal(body.environment.type,'none');assert.deepEqual(body.agent.tools,[{type:'web_search',mode:'live',context_size:'medium'}]);return stream;},delete:async id=>calls.push(id)}}}},budget:{reserve:()=> 'b',finishAgent:(id,result)=>calls.push(result)}});
   assert.deepEqual(await planner.decide({utterance:'Show my list'}),d);await planner.drain();assert.equal(calls[0],'test');assert.equal(calls[1].complete,true);
 });
 test('Agents stream failure cancels, deletes and never accepts an incomplete decision',async()=>{

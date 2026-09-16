@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { validateDecision } from './assistant-contract.mjs';
+import { validateDecision,matches } from './assistant-contract.mjs';
+import {validateResearchSpec,validateResearchBoard,researchBoardSchema,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {promoteQuickAction} from './quick-actions.mjs';
 import {emptyWeather,weatherSummary} from './weather.mjs';
 import {validateWeatherSpec,composeWeather,compositionSummary,refreshComposition,viewOfferCurrent} from './weather-composition.mjs';
@@ -22,7 +23,7 @@ function text(value, max = 300) {
 export class Session {
   constructor({ onChange = () => {}, file, now = Date.now, learnQuickActions=process.env.OPENAI_LEARNED_FAST_PATH!=='0' } = {}) {
     this.onChange = onChange; this.file = file; this.now = now; this.learnQuickActions=learnQuickActions;
-    this.repertoire=new ReusableViews({weather:validateWeatherSpec});
+    this.repertoire=new ReusableViews({weather:validateWeatherSpec,research:validateResearchSpec});
     this.state = { version: 1, revision: 0, panel: 'home', message: 'What would you like to do?', timers: [], todos: [], tasks: [], recipes: [], weatherViews:[],viewOffer:null,weather:emptyWeather(), catalog };
     if (file) {
       try {
@@ -76,12 +77,14 @@ export class Session {
     const before=structuredClone(this.state);
     try {
       if(decision.actions.some(a=>a.action==='compose_weather')&&decision.actions.length!==1)throw Error('Compose one view at a time');
+      if(decision.actions.some(a=>a.action==='compose_research')&&decision.actions.length!==1)throw Error('Compose one research board at a time');
       if(decision.actions.some(a=>a.action==='resolve_view_offer')&&decision.actions.length!==1)throw Error('Resolve a save offer on its own');
       if(!decision.actions.some(a=>a.action==='resolve_view_offer'))this.state.viewOffer=null;
       const confirmations=[];
       for(const a of decision.actions) {
         if(a.action==='get_time'){confirmations.push('It is '+new Date(this.now()).toLocaleTimeString()+'.');continue;}
         this.apply(a.action,a);
+        if(['compose_research','open_research_view','research_page'].includes(a.action)){confirmations.push(this.state.research.summary+' '+(this.state.research.caveat||'')+' Research checked '+new Date(this.state.research.fetchedAt).toISOString()+'. '+(this.state.research.savedId?'The recipe is saved for reuse.':'Recipe not saved: library full.')+' Page '+(this.state.research.page+1)+' of '+Math.ceil(this.state.research.cards.length/2)+'.');continue;}
         if(a.action==='compose_weather'||a.action==='open_weather_view'){confirmations.push(compositionSummary(this.state.weather.composition.data));if(a.action==='compose_weather')confirmations.push(this.state.weather.composition.savedId?'This layout is saved automatically for reuse; do not ask to save it.':'This view was not saved: '+this.state.weather.composition.saveReason+'.');continue;}
         if(a.action==='resolve_view_offer'||a.action==='save_current_view'){confirmations.push(this.state.message);continue;}
         if(a.action==='get_weather'||(a.action==='show'&&a.panel==='weather')){confirmations.push(weatherSummary(this.state.weather,this.state.weather.view,this.now()));continue;}
@@ -93,6 +96,7 @@ export class Session {
       this.state.assistantHistory=[...(this.state.assistantHistory||[]),{user:utterance,assistant:message,outcome:decision.outcome,status:decision.status}].slice(-8);
       const result={status:decision.status==='clarify'?'needs_input':'completed',action:'assistant',message:message+(decision.options.length?' Options: '+decision.options.map((o,i)=>`${i+1}. ${o.label}`).join('; '):'')};
       if(decision.actions.some(a=>a.action==='compose_weather'))result.compositionId=this.state.weather.composition.id;
+      if(decision.actions.some(a=>a.action==='compose_research'))result.compositionId=this.state.research.id;
       const promotion=this.learnQuickActions?promoteQuickAction(before,decision,utterance,this.now()):null;
       if(promotion)this.state.quickActions=[...(this.state.quickActions||[]).filter(e=>e.phrase!==promotion.phrase),promotion].slice(-64);
       this.state.assistantReceipts=[...(this.state.assistantReceipts||[]),{id,result}].slice(-500);
@@ -113,6 +117,23 @@ export class Session {
   }
   apply(action, args) {
     const s = this.state;
+    if(action==='compose_research'){
+      if(!matches(researchBoardSchema,args.board))throw Error('Invalid research board');
+      validateResearchBoard(args.board);
+      const saved=this.repertoire.retain(s,{kind:'research',scope:'web',spec:args.board.spec},this.now());
+      const board={...structuredClone(args.board),id:randomUUID(),savedId:saved?.id||null,fetchedAt:this.now(),page:0};
+      s.research=board;s.researchCache=[...(s.researchCache||[]).filter(b=>b.savedId!==board.savedId),board].slice(-12);
+      s.panel='research';return;
+    }
+    if(action==='open_research_view'){
+      const board=(s.researchCache||[]).find(b=>b.savedId===(args.viewId||args.id));
+      if(args.refresh||!board||this.now()-board.fetchedAt>=RESEARCH_FRESH_MS)throw Error('Research needs a fresh lookup; ask to refresh this view');
+      s.research={...structuredClone(board),page:0};s.panel='research';return;
+    }
+    if(action==='research_page'){
+      if(s.panel!=='research'||!s.research||!['next','previous'].includes(args.direction))throw Error('No research page');
+      s.research.page=Math.max(0,Math.min(Math.ceil(s.research.cards.length/2)-1,(s.research.page||0)+(args.direction==='next'?1:-1)));return;
+    }
     if(action==='compose_weather'){
       validateWeatherSpec(args.spec);
       const locationId=args.locationId||s.weather.activeId;
@@ -149,7 +170,7 @@ export class Session {
       s.weather.view=args.period;s.weather.composition=null;s.viewOffer=null;s.panel='weather';return;
     }
     if (action === 'show') {
-      if (!['home','time','timers','todos','weather','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
+      if (!['home','time','timers','todos','weather','research','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
       s.viewOffer=null;s.panel = args.panel; return;
     }
     if (action === 'start_timer') {

@@ -11,6 +11,7 @@ import {analyzeQuickAction} from './quick-actions.mjs';
 import {weatherIntent} from './weather.mjs';
 import {trackTaskProgress} from './task-progress.mjs';
 import {savedViewIntent} from './weather-composition.mjs';
+import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {assistantFailureMessage} from './agent-recovery.mjs';
 
 export function isConversationEnd(text){return /^(?:(?:ok(?:ay)?|thanks|thank you)[,.!]?\s+)?(?:that['’]?s all|end (?:the )?conversation|stop listening|goodbye)(?:[,.!]?\s+(?:thanks|thank you|mirror))?[.!?\s]*$/i.test(text.trim());}
@@ -172,6 +173,11 @@ export class Voice {
     }catch{a.trace.event('transport.error',{error_code:'timer_context_failed'});}
   }
   fastAction(text){
+    const research=researchIntent(text,this.session.state);
+    if(research){
+      const cached=this.session.state.researchCache?.find(b=>b.savedId===research.viewId);
+      if(research.action==='research_page'||(!research.refresh&&cached&&this.session.now()-cached.fetchedAt<RESEARCH_FRESH_MS))return {action:research,reason:'matched',source:'learned',template:'research_view'};
+    }
     const saved=savedViewIntent(text,this.session.state,this.session.now());
     if(saved)return {action:saved,source:'learned',template:'weather_view',reason:'matched'};
     const forecast=weatherIntent(text,this.session.state.weather);

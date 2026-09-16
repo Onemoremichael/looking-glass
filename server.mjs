@@ -16,6 +16,7 @@ import {Wake} from './wake.mjs';
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
 const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png' };
 Object.assign(files,{'/weather-ui.js':'weather-ui.js','/weather.css':'weather.css','/weather-controls.js':'weather-controls.js'});
+Object.assign(files,{'/research-ui.js':'research-ui.js','/research.css':'research.css'});
 for(const kind of ['cloud','sun','moon','rain','storm','snow','fog']){
   files['/assets/weather/'+kind+'-volume-v1.png']='assets/weather/'+kind+'-volume-v1.png';
 }

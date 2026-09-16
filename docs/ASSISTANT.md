@@ -12,8 +12,8 @@ starts, explicit single-timer cancellations, and eligible learned phrases take a
 deterministic local accelerator (see [VOICE.md](VOICE.md)); the
 same atomic action contract, durable receipts and shared history still apply.
 Unmatched task requests and clarification answers delegate to an Agents API session (not the Agents SDK).
-The backend uses GPT-5.4 Mini, low reasoning, schema-constrained JSON, no tools,
-no sandbox and no subagents. The model proposes actions; only the local app executes
+The backend uses GPT-5.4 Mini, low reasoning, schema-constrained JSON, read-only web
+search, no shell sandbox and no subagents. The model proposes actions; only the local app executes
 them. The cloud session is deleted after completion; interrupted sessions are
 cancelled first. Deletion is not a claim of zero provider retention.
 
@@ -26,7 +26,11 @@ mutation if an action fails. Weather is connected through a cached Open-Meteo ad
 `get_weather` selects now/today/tomorrow/week and an optional saved location ID, then
 returns an actual cache-derived summary. Calendar remains a placeholder. Weather
 context includes source timestamps and stale/setup/unavailable states. See [WEATHER.md](WEATHER.md).
-No web research, external messages, scheduled reminders, camera or background jobs.
+Research can assemble cited boards using live web search. Source URLs must match
+opened pages in provider tool events or pass bounded public-page verification
+after a search, and each card must cite a known source.
+No external messages, scheduled reminders, camera or autonomous background jobs.
+See [RESEARCH.md](RESEARCH.md) for reuse, cache behavior and limitations.
 
 An execute message is composed from actual local results, not the model's proposed
 success wording. Clarification/limitation wording comes from the model and still
