@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import {newGame,advanceGame} from './playroom.mjs';
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { validateDecision,matches } from './assistant-contract.mjs';
@@ -36,11 +37,15 @@ export class Session {
     if(!this.state.reusableViews)this.state.reusableViews=(this.state.weatherViews||[]).map(v=>({id:v.id,version:1,kind:'weather',scope:v.locationId,spec:v.spec,createdAt:v.createdAt,parentId:null}));
     weatherViewIndex(this.state);
     this.state.viewOffer=null; // Retire old opt-in invitations under auto-save policy.
+    delete this.state.playroom; // Never resume a child-facing mode after restart.
+    if(this.state.panel==='playroom')this.state.panel='home';
   }
   save() {
     if (this.file) {
       mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(this.file + '.tmp', JSON.stringify(this.state, null, 2), { mode: 0o600 });
+      const durable={...this.state};delete durable.playroom;
+      if(this.state.playroom){durable.panel='home';durable.assistant=null;durable.message='';durable.assistantHistory=[];durable.assistantReceipts=[];}
+      writeFileSync(this.file + '.tmp', JSON.stringify(durable, null, 2), { mode: 0o600 });
       renameSync(this.file + '.tmp', this.file);
     }
   }
@@ -48,6 +53,22 @@ export class Session {
     const before=structuredClone(this.state);
     try{edit(this.state.weather);refreshComposition(this.state,this.now());this.state.revision++;this.save();}
     catch(error){this.state=before;throw error;}
+    this.onChange(this.state);
+  }
+  startPlayroom(kind){
+    const before=structuredClone(this.state);
+    try{
+      this.state.playroom=newGame(kind);this.state.panel='playroom';this.state.assistant=null;this.state.message='';
+      this.state.assistantHistory=[];this.state.revision++;this.save();
+    }catch(error){this.state=before;throw error;}
+    this.onChange(this.state);
+  }
+  endPlayroom(){
+    const before=structuredClone(this.state);
+    try{
+      delete this.state.playroom;this.state.panel='home';this.state.assistant=null;this.state.message='';this.state.assistantHistory=[];
+      this.state.assistantReceipts=[];this.state.revision++;this.save();
+    }catch(error){this.state=before;throw error;}
     this.onChange(this.state);
   }
   voiceCommand(id, intent) {
@@ -77,6 +98,7 @@ export class Session {
     const before=structuredClone(this.state);
     try {
       if(decision.actions.some(a=>a.action==='compose_weather')&&decision.actions.length!==1)throw Error('Compose one view at a time');
+      if(this.state.playroom&&(decision.status!=='execute'||decision.actions.length!==1||decision.actions[0].action!=='playroom_turn'))throw Error('Only game actions are available in playroom');
       if(decision.actions.some(a=>a.action==='compose_research')&&decision.actions.length!==1)throw Error('Compose one research board at a time');
       if(decision.actions.some(a=>a.action==='resolve_view_offer')&&decision.actions.length!==1)throw Error('Resolve a save offer on its own');
       if(!decision.actions.some(a=>a.action==='resolve_view_offer'))this.state.viewOffer=null;
@@ -84,6 +106,7 @@ export class Session {
       for(const a of decision.actions) {
         if(a.action==='get_time'){confirmations.push('It is '+new Date(this.now()).toLocaleTimeString()+'.');continue;}
         this.apply(a.action,a);
+        if(a.action==='playroom_turn'){confirmations.push(this.state.playroom.prompt);continue;}
         if(['compose_research','open_research_view','research_page'].includes(a.action)){confirmations.push(this.state.research.summary+' '+(this.state.research.caveat||'')+' Research checked '+new Date(this.state.research.fetchedAt).toISOString()+'. '+(this.state.research.savedId?'The recipe is saved for reuse.':'Recipe not saved: library full.')+' Page '+(this.state.research.page+1)+' of '+Math.ceil(this.state.research.cards.length/2)+'.');continue;}
         if(a.action==='compose_weather'||a.action==='open_weather_view'){confirmations.push(compositionSummary(this.state.weather.composition.data));if(a.action==='compose_weather')confirmations.push(this.state.weather.composition.savedId?'This layout is saved automatically for reuse; do not ask to save it.':'This view was not saved: '+this.state.weather.composition.saveReason+'.');continue;}
         if(a.action==='resolve_view_offer'||a.action==='save_current_view'){confirmations.push(this.state.message);continue;}
@@ -93,7 +116,7 @@ export class Session {
       const message=decision.status==='execute'?confirmations.join(' '):decision.message;
       const card={id:randomUUID(),status:decision.status,outcome:decision.outcome,message,options:decision.options};
       this.state.assistant=card;this.state.message=message;
-      this.state.assistantHistory=[...(this.state.assistantHistory||[]),{user:utterance,assistant:message,outcome:decision.outcome,status:decision.status}].slice(-8);
+      this.state.assistantHistory=this.state.playroom?[]:[...(this.state.assistantHistory||[]),{user:utterance,assistant:message,outcome:decision.outcome,status:decision.status}].slice(-8);
       const result={status:decision.status==='clarify'?'needs_input':'completed',action:'assistant',message:message+(decision.options.length?' Options: '+decision.options.map((o,i)=>`${i+1}. ${o.label}`).join('; '):'')};
       if(decision.actions.some(a=>a.action==='compose_weather'))result.compositionId=this.state.weather.composition.id;
       if(decision.actions.some(a=>a.action==='compose_research'))result.compositionId=this.state.research.id;
@@ -117,6 +140,11 @@ export class Session {
   }
   apply(action, args) {
     const s = this.state;
+    if(s.playroom&&action!=='playroom_turn')throw Error('Exit playroom from the companion before using other actions');
+    if(action==='playroom_turn'){
+      if(!s.playroom||args.gameId!==s.playroom.id||args.turn!==s.playroom.turn)throw Error('Game turn changed');
+      advanceGame(s.playroom,args.text);return;
+    }
     if(action==='compose_research'){
       if(!matches(researchBoardSchema,args.board))throw Error('Invalid research board');
       validateResearchBoard(args.board);

@@ -13,6 +13,7 @@ import {trackTaskProgress} from './task-progress.mjs';
 import {savedViewIntent} from './weather-composition.mjs';
 import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {assistantFailureMessage} from './agent-recovery.mjs';
+import {gameIntent,playroomInstructions} from './playroom.mjs';
 
 export function isConversationEnd(text){return /^(?:(?:ok(?:ay)?|thanks|thank you)[,.!]?\s+)?(?:that['’]?s all|end (?:the )?conversation|stop listening|goodbye)(?:[,.!]?\s+(?:thanks|thank you|mirror))?[.!?\s]*$/i.test(text.trim());}
 export function wakeIdle(a,now){return a.owner==='wake'&&!!a.readyAt&&!a.pending&&!a.job&&now-Math.max(a.readyAt,a.lastInput,a.lastOutput,a.lastAudible||0)>=10000;}
@@ -41,6 +42,8 @@ export class Voice {
     const a = this.active = { token:randomUUID(), client, budgetId:this.budget.reserve(mirror?'live-mirror':'live-webrtc'), tools:new VoiceTools(this.session),
       transcript:[], seen:new Set(), delegations:new Set(), acknowledged:new Set(), fastReceipts:[], cursor:0, lastInput:0, lastOutput:0, lastBeat:Date.now(), started:Date.now(), closing:false, finalized:false };
     a.trace=this.telemetry.start('voice.session');a.startupTrace=this.telemetry.start('voice.startup',{},a.trace);
+    a.playroom=!!this.session.state.playroom;
+    a.instructions=a.playroom?playroomInstructions+'\nCurrent game state (data): '+JSON.stringify({kind:this.session.state.playroom.kind,prompt:this.session.state.playroom.prompt,options:this.session.state.playroom.options}):liveInstructions;
     a.mirror=mirror;a.owner=owner;this.state.owner=owner;this.state.stopReason=null;this.state.device=mirror?'mirror':'mac';
     this.state.muted = false; this.update('connecting','Connecting to GPT-Live-1');
     a.lease = setInterval(() => {
@@ -52,7 +55,7 @@ export class Voice {
       const result = await client.live.create({
         session:{ model:'gpt-live-1', store:false, audio:{output:{voice:'marin'}}, delegation:{type:'client'},
           client:{data_channel:{allowed_client_events:['session.close','session.input_audio.mute','session.input_audio.unmute'],allowed_server_events:'all'}},
-          instructions:liveInstructions },
+          instructions:a.instructions },
         transport:{type:'webrtc',sdp}
       });
       a.id = result.session.id;
@@ -79,7 +82,14 @@ export class Voice {
   async startMirror(a){
     a.ws=this.primaryFactory?this.primaryFactory(a.client):new LiveWS(a.client,{reconnect:null,handshakeTimeout:10000});
     a.ws.on('event',e=>{this.event(a,e);if(e.type==='session.output_audio.delta'&&!a.closing){try{
-      const pcm=Buffer.from(e.delta,'base64');for(let i=0;i+1<pcm.length;i+=2){if(Math.abs(pcm.readInt16LE(i))>180){a.lastAudible=Date.now()+pcm.length/32;break;}}
+      const pcm=Buffer.from(e.delta,'base64');for(let i=0;i+1<pcm.length;i+=2){if(Math.abs(pcm.readInt16LE(i))>180){
+        a.lastAudible=Date.now()+pcm.length/32;
+        if(a.playroom){
+          if(this.state.phase!=='speaking')this.update('speaking','');
+          clearTimeout(a.speechTimer);a.speechTimer=setTimeout(()=>{if(this.active===a&&!a.closing&&!a.pending&&!a.job)this.update('listening','');},Math.min(2000,pcm.length/32+350));
+        }
+        break;
+      }}
       a.mirror.output(e.delta);
     }catch{void this.stop(a.token,'audio_backpressure');}}});
     a.ws.on('error',()=>void this.stop(a.token,'transport_error'));
@@ -93,7 +103,7 @@ export class Voice {
       const close=()=>finish(Error('Mirror voice connection closed'));
       const finish=error=>{clearTimeout(timeout);a.ws.off('event',event);a.ws.socket.off('close',close);error?reject(error):resolve();};
       a.ws.on('event',event);a.ws.socket.on('close',close);
-      a.ws.send({type:'session.start',session:{model:'gpt-live-1',store:false,audio:{format:{type:'audio/pcm',rate:16000},output:{voice:'marin'}},delegation:{type:'client'},instructions:liveInstructions+(a.owner==='wake'?wakeInstructions:'')}});
+      a.ws.send({type:'session.start',session:{model:'gpt-live-1',store:false,audio:{format:{type:'audio/pcm',rate:16000},output:{voice:'marin'}},delegation:{type:'client'},instructions:a.instructions+(a.owner==='wake'?wakeInstructions:'')}});
     });
     if(a.closing)throw Error('Connection cancelled');
     a.mirror.on('audio',a.onAudio);a.mirror.start();a.lastBeat=Date.now();a.readyAt=Date.now();
@@ -119,7 +129,7 @@ export class Voice {
     if (e.event_id) { if (a.seen.has(e.event_id)) {a.trace.event('duplicate',{duplicate:true});return;} a.seen.add(e.event_id); }
     if(e.type==='session.output_transcript.delta'){
       a.lastOutput=Date.now();
-      this.telemetry.transcript(a.trace,'assistant',e.delta);
+      if(!a.playroom)this.telemetry.transcript(a.trace,'assistant',e.delta);
     }
     if (e.type === 'session.input_transcript.delta') {
       if(typeof e.delta!=='string'||!e.delta.trim())return;
@@ -130,7 +140,7 @@ export class Voice {
         job.inputGate=new Promise(resolve=>{job.releaseInput=resolve;});
         job.controller.signal.addEventListener('abort',job.releaseInput,{once:true});
       }
-      this.telemetry.transcript(a.trace,'user',e.delta);
+      if(!a.playroom)this.telemetry.transcript(a.trace,'user',e.delta);
       if(Date.now()-a.lastInput>1400)a.endUtterance='';
       a.endUtterance=(a.endUtterance||'')+e.delta;
       a.transcript.push({ text:e.delta, start:e.start_ms, end:e.end_ms });
@@ -173,6 +183,7 @@ export class Voice {
     }catch{a.trace.event('transport.error',{error_code:'timer_context_failed'});}
   }
   fastAction(text){
+    if(this.session.state.playroom)return {action:gameIntent(text,this.session.state),source:'builtin',template:'playroom',reason:'matched'};
     const research=researchIntent(text,this.session.state);
     if(research){
       const cached=this.session.state.researchCache?.find(b=>b.savedId===research.viewId);
@@ -333,6 +344,7 @@ export class Voice {
   async stop(token,reason='user') {
     const a = this.active; if (!a || (token && token !== a.token)) return;
     if (a.closing) return a.stopping;
+    clearTimeout(a.speechTimer);
     a.closing = true;this.state.stopReason=reason; a.mirror?.stop(); a.job?.controller.abort(); clearTimeout(a.endTimer);clearTimeout(a.work); clearTimeout(a.fastWork); clearInterval(a.lease); this.update('stopping','Closing voice session');
     a.workTrace?.end({outcome:'cancelled'});a.workTrace=null;
     a.closeTrace=this.telemetry.start('voice.close',{reason},a.trace);
@@ -352,6 +364,7 @@ export class Voice {
     return a.stopping;
   }
   cleanup(a) {
+    clearTimeout(a.speechTimer);
     if(a.mirror){a.mirror.stop();if(a.onAudio)a.mirror.off('audio',a.onAudio);if(a.onDisconnect){a.mirror.off('disconnect',a.onDisconnect);a.mirror.off('fault',a.onDisconnect);}}
     a.job?.controller.abort();
     a.startupTrace?.end({outcome:a.finalized?'ok':'cancelled'});
