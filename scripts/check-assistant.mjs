@@ -23,6 +23,6 @@ await run('clarify','Start a timer.');
 assert.equal(session.state.assistant.status,'clarify');assert.equal(session.state.timers.length,0);
 await run('answer','Make that five minutes.');
 assert.equal(session.state.timers.length,1);
-await run('unsupported','What will the weather be tomorrow?');
+await run('unsupported','Read my calendar appointments for tomorrow.');
 assert.equal(session.state.assistant.status,'unsupported');
 console.log('Four synthetic model decisions passed; live application state was not modified.');

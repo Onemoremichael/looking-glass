@@ -1,3 +1,4 @@
+import {weatherIntent,weatherSummary} from './weather.mjs';
 // Deliberately narrow local grammar. Never execute a prefix of an unfinished request.
 const numbers = { a:1, an:1, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10, eleven:11, twelve:12, fifteen:15, twenty:20, thirty:30, forty:40, fifty:50, sixty:60 };
 export function parseVoice(text) {
@@ -27,7 +28,7 @@ export class VoiceTools {
   constructor(session) { this.session = session; this.lastTimer = null; this.results = new Map(); }
   execute(id, transcript) {
     if (this.results.has(id)) return this.results.get(id);
-    const intent = parseVoice(transcript);
+    const intent = weatherIntent(transcript,this.session.state.weather)||parseVoice(transcript);
     let result;
     if (!intent) result = { status:'needs_input', message:'That wording did not match a supported action. Nothing was changed. Could you rephrase it as one request?' };
     else {
@@ -40,6 +41,7 @@ export class VoiceTools {
         const receipt = this.session.voiceCommand(id, intent);
         if (intent.action === 'start_timer') this.lastTimer = receipt.timerId;
         result = { status:'completed', action:intent.action, message: intent.action === 'start_timer' ? `Timer started for ${intent.seconds} seconds. The alert is visual only.` : intent.action === 'cancel_timer' ? 'Timer cancelled.' : intent.action === 'add_todo' ? 'Added one item to your to-do list and displayed it.' : ['weather','calendar'].includes(intent.panel) ? `${intent.panel} placeholder displayed. No provider is connected; no live data was fetched.` : intent.panel === 'time' ? `Clock displayed. Mac time is ${new Date(this.session.now()).toLocaleTimeString()}.` : `${intent.panel} displayed.` };
+        if(intent.action==='get_weather'||intent.panel==='weather')result.message=weatherSummary(this.session.state.weather,intent.period||'now',this.session.now());
       }
     }
     this.results.set(id, result); return result;

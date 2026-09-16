@@ -6,13 +6,16 @@ import { VoiceTools } from './voice-tools.mjs';
 import { noTelemetry } from './telemetry.mjs';
 import { liveInstructions } from './prompts/live-instructions.mjs';
 import { analyzeTimerIntent, TIMER_QUIET_MS } from './timer-intent.mjs';
+import {analyzeQuickAction} from './quick-actions.mjs';
+import {weatherIntent} from './weather.mjs';
 
 export class Voice {
-  constructor({ session, budgetPath, publish = () => {}, clientFactory, attachFactory, telemetry=noTelemetry, assistant, fastTimers=process.env.OPENAI_TIMER_FAST_PATH!=='0' } = {}) {
+  constructor({ session, budgetPath, publish = () => {}, clientFactory, attachFactory, telemetry=noTelemetry, assistant, fastTimers=process.env.OPENAI_TIMER_FAST_PATH!=='0', learnedFast=process.env.OPENAI_LEARNED_FAST_PATH!=='0' } = {}) {
     this.session = session; this.publish = publish; this.budget = new ApiBudget(budgetPath);
     this.telemetry=telemetry;
     this.assistant=assistant;
     this.fastTimers=fastTimers;
+    this.learnedFast=learnedFast;
     this.clientFactory = clientFactory || (() => new OpenAI({ maxRetries:0, timeout:15000 }));
     this.attachFactory = attachFactory || ((client,id) => new SidebandWS(client,{session_id:id},{reconnect:null,handshakeTimeout:10000}));
     this.state = { phase:'off', detail:'Microphone off', muted:false }; this.active = null;
@@ -110,8 +113,16 @@ export class Voice {
     // No new action and no second spoken confirmation. Transcript events may
     // arrive after a delegation, so no-unread reconciliation waits for quiet.
     try{
-      if(a.ws?.socket.readyState===1)a.ws.send({type:'session.thinking.append',delegation_id:id,content:'The preceding timer request was already handled by the application. Do not repeat the action or confirmation. Wait for the next user request.'});
+      if(a.ws?.socket.readyState===1)a.ws.send({type:'session.thinking.append',delegation_id:id,content:'The preceding request was already handled by the application. Do not repeat the action or confirmation. Wait for the next user request.'});
     }catch{a.trace.event('transport.error',{error_code:'timer_context_failed'});}
+  }
+  fastAction(text){
+    const forecast=weatherIntent(text,this.session.state.weather);
+    if(forecast)return {action:forecast,source:'builtin',template:'get_weather',reason:'matched'};
+    const timer=analyzeTimerIntent(text);
+    if(timer.intent)return {action:{action:'start_timer',...timer.intent},source:'builtin',template:'start_timer',reason:timer.reason};
+    const quick=analyzeQuickAction(text,this.session.state,{learned:this.learnedFast});
+    return quick.action?quick:{...quick,reason:['unsupported_wording','not_learned'].includes(quick.reason)?timer.reason:quick.reason};
   }
   scheduleTimer(a){
     clearTimeout(a.fastWork);
@@ -119,22 +130,24 @@ export class Voice {
     if(!this.fastTimers){a.fastFallbackReason='disabled';return;}
     const from=a.cursor,to=a.transcript.length;
     const text=a.transcript.slice(from,to).map(t=>t.text).join('');
-    const {intent}=analyzeTimerIntent(text);
+    const route=this.fastAction(text);
     // A pending question can change the meaning of a short answer; let the
     // contextual planner handle it. Timers do not require a cloud reservation.
     if(this.session.state.assistant?.status==='clarify'){a.fastFallbackReason='pending_clarification';return;}
-    if(!intent)return;
+    if(!route.action){a.fastFallbackReason=route.reason;return;}
     const revision=this.session.state.revision;
     a.fastWork=setTimeout(()=>{
       if(a.closing||a!==this.active||a.cursor!==from||a.transcript.length!==to)return;
       if(revision!==this.session.state.revision){a.fastFallbackReason='state_changed';return;}
-      const span=this.telemetry.start('voice.timer_fast',{since_last_fragment_ms:Date.now()-a.lastInput,quiet_window_ms:TIMER_QUIET_MS},a.workTrace||a.trace);
+      const checked=this.fastAction(text);
+      if(!checked.action||JSON.stringify(checked.action)!==JSON.stringify(route.action)){a.fastFallbackReason=checked.reason;return;}
+      const span=this.telemetry.start('voice.timer_fast',{since_last_fragment_ms:Date.now()-a.lastInput,quiet_window_ms:TIMER_QUIET_MS,source:route.source,template:route.template},a.workTrace||a.trace);
       const id=a.token+':timer:'+from+':'+to;
       let result;
       try{
         result=this.session.commitDecision(id,revision,{
-          status:'execute',outcome:'Start a timer.',message:'Timer requested.',
-          actions:[{action:'start_timer',...intent}],options:[],selectedOptionId:null,
+          status:'execute',outcome:route.action.action==='start_timer'?'Start a timer.':route.action.action==='cancel_timer'?'Cancel the timer.':route.action.action==='get_weather'?'Show the forecast.':'Show the requested panel.',message:'Action requested.',
+          actions:[route.action],options:[],selectedOptionId:null,
         },text);
       }catch{
         a.fastFallbackReason='commit_failed';
@@ -145,7 +158,7 @@ export class Voice {
       a.job?.controller.abort();a.job=null;clearTimeout(a.work);
       a.cursor=to;a.pending=null;
       a.fastReceipts.push({from,to,result});if(a.fastReceipts.length>100)a.fastReceipts.shift();
-      span.end({outcome:'completed',action:'start_timer',revision:this.session.state.revision,timer_count:this.session.state.timers.length});
+      span.end({outcome:'completed',action:route.action.action,revision:this.session.state.revision,timer_count:this.session.state.timers.length});
       a.workTrace?.end({outcome:'completed',quiet_window_ms:TIMER_QUIET_MS});a.workTrace=null;
       a.toolFinishedAt=Date.now();
       // null is the documented context channel for application-owned work when

@@ -15,7 +15,8 @@
     var html='';
     if(state.panel==='home')html='<div class="grid"><article><span class="tag">WORKING LOCALLY</span><h3>Everyday essentials</h3><p>Time, persistent timers, and a simple to-do list.</p></article><article><span class="tag">YOUR CAPABILITY LIBRARY</span><h3>'+state.recipes.length+' saved views</h3><p>Keep the structure. Refresh the facts. Fork a view when your needs change.</p></article><article><span class="tag">HONEST STATUS</span><h3>'+state.tasks.filter(function(t){return t.status!=='cancelled';}).length+' requests</h3><p>Clarify first. See what is blocked. No background research is running.</p></article><article><span class="tag">OUTCOME-FIRST VOICE</span><h3>Speak, then see it</h3><p>Ask naturally. The agent can act, clarify with shared options, or explain a limitation. Research is not connected.</p></article></div>';
     if(state.panel==='time')html='<p class="empty">Time shown above follows this device’s clock and time zone.</p>';
-    if(state.panel==='weather'||state.panel==='calendar')html='<article><span class="tag">NOT CONNECTED</span><h2>'+esc(state.panel==='weather'?'A forecast you can trust.':'A clear view of your day.')+'</h2><p>'+esc(state.panel==='weather'?'We need a location, units, and a live data source. No invented forecasts.':'Connect a calendar explicitly before we can review events. No account access has been requested.')+'</p></article>';
+    if(state.panel==='weather')html='<div id="weather-content">'+window.GlassWeather.render(state.weather)+'</div>';
+    if(state.panel==='calendar')html='<article><span class="tag">NOT CONNECTED</span><h2>A clear view of your day.</h2><p>Connect a calendar explicitly before we can review events. No account access has been requested.</p></article>';
     if(state.panel==='timers'){
       html='<form id="timer-form"><label for="seconds">Duration in seconds (1–86400)</label><input id="seconds" type="number" min="1" max="86400" value="300" required><button>Start timer</button></form><p class="note">Visual alerts only. Saved across server restarts; not a safety-critical alarm.</p>';
       html+=state.timers.map(function(t){return '<article><span class="tag">'+esc(t.label)+'</span><div class="countdown" data-end="'+t.endsAt+'"></div>'+button('cancel_timer',t.id,'Dismiss timer')+'</article>';}).join('');
@@ -32,7 +33,7 @@
       html=state.recipes.length?'':'<p class="empty">Nothing saved yet. Configure a request, then choose “Keep this configuration.”</p>';
       html+=state.recipes.map(function(r){return '<article><span class="tag">CONFIGURATION ONLY · SOURCE NOT CONNECTED</span><h3>'+esc(r.title)+'</h3><p>'+esc(r.preferences)+'</p><p class="note">Agenda component · refresh on open when connected · no scheduled work'+(r.parentId?' · forked variation':'')+'</p>'+button('open_recipe',r.id,'Open')+'<details><summary>Create a variation</summary><form data-fork="'+esc(r.id)+'"><label>New name<input name="title" maxlength="80" required></label><label>Preferences<textarea name="preferences" maxlength="600" required>'+esc(r.preferences)+'</textarea></label><button>Save variation</button></form></details></article>';}).join('');
     }
-    document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html;tick();window.GlassSurface.rendered(state);
+    document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html;window.GlassWeatherControls.render(state);tick();window.GlassSurface.rendered(state);
   }
   function tick(){
     var d=new Date();document.getElementById('clock').textContent=d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
@@ -55,4 +56,5 @@
     error:function(){document.getElementById('connection').textContent='Disconnected. Reconnecting; displayed state may be stale.';}
   });
   tick();setInterval(tick,500);
+  setInterval(function(){var el=document.getElementById('weather-content');if(el&&state)el.innerHTML=window.GlassWeather.render(state.weather);},60000);
 }());

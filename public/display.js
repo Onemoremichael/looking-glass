@@ -1,18 +1,33 @@
 (function(){
+  var lastState=null,weatherMinute=-1;
+  // The recovered Android image can default to UTC. Deployment may explicitly
+  // supply the Mac's IANA zone without changing Android's system configuration.
+  var timeOptions={hour:'numeric',minute:'2-digit'},dateOptions={weekday:'long',month:'short',day:'numeric'};
+  var zoneMatch=location.search.match(/(?:^|[?&])timeZone=([^&]+)/);
+  if(zoneMatch){
+    try{
+      var zone=decodeURIComponent(zoneMatch[1]);
+      new Intl.DateTimeFormat('en-US',{timeZone:zone}).format(new Date());
+      timeOptions.timeZone=zone;dateOptions.timeZone=zone;
+    }catch(e){/* Invalid/unsupported zones retain the device-local fallback. */}
+  }
   function esc(s){return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function render(state){
+    lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':'');
     var html='';
-    if(state.panel==='weather'||state.panel==='calendar')html='<article><span class="tag">NOT CONNECTED</span><h2>'+esc(state.panel==='weather'?'Weather':'Calendar')+'</h2><p>Set up this connection from your companion.</p></article>';
+    if(state.panel==='weather')html='<div id="weather-content">'+window.GlassWeather.render(state.weather)+'</div>';
+    if(state.panel==='calendar')html='<article><span class="tag">NOT CONNECTED</span><h2>Calendar</h2><p>Set up this connection from your companion.</p></article>';
     if(state.panel==='todos')html=state.todos.slice(0,5).map(function(t,i){return '<p class="'+(t.done?'done':'')+'">'+(i+1)+'. '+(t.done?'✓ ':'○ ')+esc(t.text)+'</p>';}).join('')+(state.todos.length>5?'<p class="note">More items on your companion.</p>':'')||'<p class="empty">Nothing on your list.</p>';
     if(state.panel==='tasks')html=state.tasks.slice(0,3).map(function(t){return '<article><span class="tag">'+esc(t.status.replace('_',' '))+'</span><h3>'+esc(t.request)+'</h3><p>'+esc(t.question||t.detail||'')+'</p>'+(t.status==='needs_input'?'<p class="note">Prototype request · reply using companion controls</p>':'')+'</article>';}).join('');
     if(state.panel==='saved')html=state.recipes.slice(0,3).map(function(r){return '<article><span class="tag">CONFIGURATION ONLY · DATA NOT CONNECTED</span><h3>'+esc(r.title)+'</h3><p>'+esc(r.preferences)+'</p></article>';}).join('');
     // Timers remain visible regardless of the requested panel.
-    html+=state.timers.map(function(t){return '<article><span class="tag">'+esc(t.label)+'</span><div class="countdown" data-end="'+t.endsAt+'"></div><p class="note">Visual alert only</p></article>';}).join('');
+    html+=state.timers.map(function(t){return '<article><span class="tag">'+esc(t.label)+'</span><div class="countdown" data-end="'+t.endsAt+'"></div></article>';}).join('');
     document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html;tick();window.GlassSurface.rendered(state);
   }
   function tick(){
-    var d=new Date();document.getElementById('clock').textContent=d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
-    document.getElementById('date').textContent=d.toLocaleDateString([],{weekday:'long',month:'short',day:'numeric'});
+    var d=new Date();document.getElementById('clock').textContent=d.toLocaleTimeString([],timeOptions);
+    document.getElementById('date').textContent=d.toLocaleDateString([],dateOptions);
+    if(lastState&&lastState.panel==='weather'&&weatherMinute!==Math.floor(Date.now()/60000)){weatherMinute=Math.floor(Date.now()/60000);var weather=document.getElementById('weather-content');if(weather)weather.innerHTML=window.GlassWeather.render(lastState.weather);}
     Array.prototype.forEach.call(document.querySelectorAll('[data-end]'),function(el){var s=Math.max(0,Math.ceil((Number(el.getAttribute('data-end'))-Date.now())/1000));el.textContent=s?Math.floor(s/60)+':'+('0'+s%60).slice(-2):'Time’s up';});
   }
   window.GlassSurface.subscribe({voice:function(state){

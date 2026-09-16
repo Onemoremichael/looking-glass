@@ -93,7 +93,7 @@ test('presentation includes result cards and each surface’s actual saved/reque
   const saved=presentation(session.state);
   assert.equal(saved.mirror.recipes.length,3);assert.equal(saved.companion.recipes.length,5);
   assert.equal(saved.assistantCard.status,'answer');
-  session.state.panel='weather';assert.equal(presentation(session.state).disconnectedPlaceholder,'weather');
+  session.state.panel='weather';assert.equal(presentation(session.state).weather.status,'setup');assert.equal(presentation(session.state).disconnectedPlaceholder,null);
 });
 test('Agents API adapter requires completed JSON, cleans its session and accounts for use',async()=>{
   const calls=[],d=decision([{action:'show',panel:'todos'}]);

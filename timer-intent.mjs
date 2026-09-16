@@ -23,7 +23,7 @@ function duration(s){
   }
   return Number.isInteger(seconds)&&seconds>=1&&seconds<=86400?seconds:null;
 }
-function framing(text){
+export function framing(text){
   let s=text.toLowerCase().trim().replace(/[’]/g,"'").replace(/([a-z0-9])-([a-z])/g,'$1 $2').replace(/\s+/g,' ');
   // Only known discourse/politeness prefixes, never arbitrary text before a
   // command. In particular do not strip "no", "but", "if", "don't" or quotes.

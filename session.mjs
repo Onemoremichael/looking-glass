@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { validateDecision } from './assistant-contract.mjs';
+import {promoteQuickAction} from './quick-actions.mjs';
+import {emptyWeather,weatherSummary} from './weather.mjs';
 
 export const catalog = [
   { id: 'time', title: 'Time & date', status: 'ready', tier: 'builtin', execution: 'local', scope: 'Device clock and date', gaps: ['Explicit time-zone preference'] },
   { id: 'timers', title: 'Timers', status: 'ready', tier: 'builtin', execution: 'local', scope: 'Named timers, list, cancel; durable deadlines and receipts; model-driven intent', gaps: ['Audio alerts', 'Pause/resume', 'Human validation of new planner'] },
   { id: 'todos', title: 'To-do list', status: 'ready', tier: 'builtin', execution: 'local', scope: 'Add, list, complete/uncomplete, remove; persistent atomic voice actions', gaps: ['Edit text', 'Human validation of new planner'] },
-  { id: 'weather', title: 'Weather', status: 'needs connection', tier: 'builtin', execution: 'cached_lookup', scope: 'Current conditions and short forecast', gaps: ['Location/units', 'Provider', 'Timestamped cache'] },
+  { id: 'weather', title: 'Weather', status: 'ready', tier: 'builtin', execution: 'cached_lookup', scope: 'Open-Meteo conditions, hourly and seven-day forecast; five saved places; F/C', gaps: ['Choose a saved location', 'No severe-weather alerts or radar'] },
   { id: 'calendar', title: 'Calendar review', status: 'needs connection', tier: 'builtin', execution: 'cached_lookup', scope: 'Read-only today, next event, upcoming week', gaps: ['Account authorization', 'Read-only adapter', 'Freshness state'] },
   { id: 'display', title: 'Display controls', status: 'partial', tier: 'builtin', execution: 'local', scope: 'Voice/companion panels; shared numbered questions; per-surface render context', gaps: ['Navigation history', 'Human validation of new planner', 'Non-touch overflow navigation'] }
 ];
@@ -16,9 +18,9 @@ function text(value, max = 300) {
   return value.trim();
 }
 export class Session {
-  constructor({ onChange = () => {}, file, now = Date.now } = {}) {
-    this.onChange = onChange; this.file = file; this.now = now;
-    this.state = { version: 1, revision: 0, panel: 'home', message: 'What would you like to do?', timers: [], todos: [], tasks: [], recipes: [], catalog };
+  constructor({ onChange = () => {}, file, now = Date.now, learnQuickActions=process.env.OPENAI_LEARNED_FAST_PATH!=='0' } = {}) {
+    this.onChange = onChange; this.file = file; this.now = now; this.learnQuickActions=learnQuickActions;
+    this.state = { version: 1, revision: 0, panel: 'home', message: 'What would you like to do?', timers: [], todos: [], tasks: [], recipes: [], weather:emptyWeather(), catalog };
     if (file) {
       try {
         const data = JSON.parse(readFileSync(file, 'utf8'));
@@ -34,11 +36,17 @@ export class Session {
       renameSync(this.file + '.tmp', this.file);
     }
   }
+  editWeather(edit){
+    const before=structuredClone(this.state);
+    try{edit(this.state.weather);this.state.revision++;this.save();}
+    catch(error){this.state=before;throw error;}
+    this.onChange(this.state);
+  }
   voiceCommand(id, intent) {
     const prior = (this.state.voiceReceipts || []).find(r => r.id === id);
     if (prior) return prior;
     if (typeof id !== 'string' || id.length > 300) throw Error('Invalid operation ID');
-    if (!['start_timer','cancel_timer','add_todo','show'].includes(intent.action)) throw Error('Unsupported voice tool');
+    if (!['start_timer','cancel_timer','add_todo','show','get_weather'].includes(intent.action)) throw Error('Unsupported voice tool');
     const before = structuredClone(this.state);
     try {
       this.apply(intent.action, intent);
@@ -64,6 +72,7 @@ export class Session {
       for(const a of decision.actions) {
         if(a.action==='get_time'){confirmations.push('It is '+new Date(this.now()).toLocaleTimeString()+'.');continue;}
         this.apply(a.action,a);
+        if(a.action==='get_weather'||(a.action==='show'&&a.panel==='weather')){confirmations.push(weatherSummary(this.state.weather,this.state.weather.view,this.now()));continue;}
         confirmations.push(a.action==='start_timer'?`Started ${a.label} for ${a.seconds} seconds (visual alert only).`:a.action==='cancel_timer'?'Timer cancelled.':a.action==='add_todo'?'Added to your to-do list.':a.action==='set_todo_done'?(a.done?'Marked the item complete.':'Marked the item incomplete.'):a.action==='remove_todo'?'Removed the to-do item.':`${a.panel} displayed${['weather','calendar'].includes(a.panel)?'; no data source connected':''}.`);
       }
       const message=decision.status==='execute'?confirmations.join(' '):decision.message;
@@ -71,12 +80,20 @@ export class Session {
       this.state.assistant=card;this.state.message=message;
       this.state.assistantHistory=[...(this.state.assistantHistory||[]),{user:utterance,assistant:message,outcome:decision.outcome,status:decision.status}].slice(-8);
       const result={status:decision.status==='clarify'?'needs_input':'completed',action:'assistant',message:message+(decision.options.length?' Options: '+decision.options.map((o,i)=>`${i+1}. ${o.label}`).join('; '):'')};
+      const promotion=this.learnQuickActions?promoteQuickAction(before,decision,utterance,this.now()):null;
+      if(promotion)this.state.quickActions=[...(this.state.quickActions||[]).filter(e=>e.phrase!==promotion.phrase),promotion].slice(-64);
       this.state.assistantReceipts=[...(this.state.assistantReceipts||[]),{id,result}].slice(-500);
       this.state.revision++;this.save();this.onChange(this.state);return result;
     }catch(e){this.state=before;throw e;}
   }
   apply(action, args) {
     const s = this.state;
+    if(action==='get_weather'){
+      if(!['now','today','tomorrow','week'].includes(args.period))throw Error('Unknown forecast period');
+      if(args.locationId!==null&&!s.weather.locations.some(l=>l.id===args.locationId))throw Error('Unknown weather location');
+      if(args.locationId)s.weather.activeId=args.locationId;
+      s.weather.view=args.period;s.panel='weather';return;
+    }
     if (action === 'show') {
       if (!['home','time','timers','todos','weather','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
       s.panel = args.panel; return;

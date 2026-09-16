@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { decisionSchema, validateDecision } from './assistant-contract.mjs';
+import { plannerDecisionSchema, validateDecision } from './assistant-contract.mjs';
 import { assistantInstructions } from './prompts/assistant-instructions.mjs';
 
 // Agents API, not Agents SDK. The cloud agent only proposes JSON: no application
@@ -32,7 +32,7 @@ export class AgentsPlanner {
     const planning=this.telemetry?.start('agent.planning',{},trace);
     try {
       stream=await this.client.beta.agents.sessions.create({
-        agent:{model:this.model,instructions:assistantInstructions,reasoning:{effort:this.effort},tools:[],multi_agent:{enabled:false},text:{format:{type:'json_schema',schema:decisionSchema},verbosity:'low'}},
+        agent:{model:this.model,instructions:assistantInstructions,reasoning:{effort:this.effort},tools:[],multi_agent:{enabled:false},text:{format:{type:'json_schema',schema:plannerDecisionSchema},verbosity:'low'}},
         environment:{type:'none'},input:JSON.stringify(context),stream:true,
       },{signal:combined});
       for await(const event of stream) {
