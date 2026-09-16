@@ -72,6 +72,12 @@ connection still shows a stale-data warning.
   require execution receipts. No network, filesystem, or device access. Offline
   execution and companion controls are verified; live model generation is not.
   See [custom functions and limitations](docs/CUSTOM-FUNCTIONS.md).
+- Conversational function reuse: successful numeric requests teach bounded
+  parameter slots; saved calculations can run again with new values locally.
+  Active-function follow-ups and one-question-at-a-time input collection avoid
+  replanning clear requests. Ambiguity, changed code and expired context fall back
+  rather than guessing. Browser controls and two Android result pages verified;
+  live spoken reuse remains unverified.
 - Image studio: asynchronous GPT Image 2.5 Sunburst adapter, progress, cancellation,
   persistent artwork/recipes and free local reopening. Real telemetry integration
   is regression-tested; ledger settlement failures pause new generation. Provider access is still

@@ -39,6 +39,8 @@ export class Session {
     if(!this.state.reusableViews)this.state.reusableViews=(this.state.weatherViews||[]).map(v=>({id:v.id,version:1,kind:'weather',scope:v.locationId,spec:v.spec,createdAt:v.createdAt,parentId:null}));
     weatherViewIndex(this.state);
     this.state.viewOffer=null; // Retire old opt-in invitations under auto-save policy.
+    // Saved recipes survive restart; a short conversational input focus does not.
+    if(this.state.customView)delete this.state.customView.interactionRevision;
     delete this.state.playroom; // Never resume a child-facing mode after restart.
     if(this.state.panel==='playroom')this.state.panel='home';
   }
