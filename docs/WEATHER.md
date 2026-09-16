@@ -63,8 +63,9 @@ silently fall back to the active city. Settings/adding new cities remain compani
 Future/follow-up requests can use `compose_weather` to assemble existing components
 for next week, later this week, a weekend, rolling seven days, or specific dates.
 Provider requests now cover up to 16 days, with at most seven dates in a composition.
-After rendering, an explicit yes can save the layout/date rule for reuse; facts are
-not frozen. See [adaptive views](ADAPTIVE-VIEWS.md) for the contract and lifecycle.
+Usable validated layouts save automatically; facts are not frozen. Follow-ups can
+reuse saved range/location/focus capabilities locally rather than matching only a
+title. See [adaptive views](ADAPTIVE-VIEWS.md) for the contract and lifecycle.
 The [structured output contract](https://developers.openai.com/api/docs/guides/structured-outputs)
 remains bounded; no arbitrary code, new model or API transport. Actual provider data
 is distinguished from the still-unconnected calendar/research features.

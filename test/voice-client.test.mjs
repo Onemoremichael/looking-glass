@@ -23,6 +23,7 @@ function fixture(t,{microphone,answer,fetcher,resume,meterFails=false}={}){
     AudioContext,RTCPeerConnection:Peer,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail;}},MediaStream:class{},AbortController,Uint8Array,setTimeout,clearTimeout,setInterval,clearInterval,
     console:{info:(...a)=>logs.push(a),warn:(...a)=>logs.push(a)},
     fetch:async(path,options)=>{
+      if(path==='/api/wake')return {ok:true,json:async()=>({enabled:false,phase:'off'})};
       posts.push(path);
       if(fetcher)return fetcher(path,options);
       return {ok:true,json:async()=>path.endsWith('/start')?{token:'test',transport:{sdp:'answer'}}:{phase:'off',detail:'Closed'}};
@@ -94,4 +95,16 @@ test('Mirror mode never asks for a browser microphone or opens WebRTC; mute and 
   assert.equal(f.peers.length,0);assert.equal(f.el('voice-status').textContent,'Mirror microphone · listening');
   f.el('voice-mute').onclick();await flush();assert.ok(f.posts.includes('/api/voice/mute'));
   f.el('voice-stop').onclick();await flush();assert.ok(f.posts.includes('/api/voice/stop'));assert.equal(f.el('voice-device').disabled,false);
+});
+test('wake standby excludes manual Start; server-owned conversations can end without a browser token',async t=>{
+  const f=fixture(t);await flush();
+  f.listeners['glass-wake']({detail:{enabled:true,phase:'standby',count:0}});
+  assert.equal(f.el('voice-start').disabled,true);assert.equal(f.el('wake-disable').disabled,false);
+  assert.match(f.el('voice-status').textContent,/Local wake listening/);
+  await f.el('voice-start').onclick();assert.equal(f.posts.length,0);
+  f.listeners['glass-voice']({detail:{phase:'listening',owner:'wake'}});
+  assert.equal(f.el('voice-stop').disabled,false);assert.doesNotMatch(f.el('voice-status').textContent,/another companion/);
+  f.listeners.pagehide();assert.equal(f.posts.length,0); // Closing UI does not silently disarm server-owned wake.
+  f.el('voice-stop').onclick();await flush();assert.ok(f.posts.includes('/api/wake/end'));
+  f.el('wake-disable').onclick();await flush();assert.ok(f.posts.includes('/api/wake/disable'));
 });

@@ -9,8 +9,10 @@ Start a conversation with the Mirror or computer audio. Ask “Show me next week
 weather, especially rain” or “What does later this week look like?” The planner
 chooses the period, emphasis, title, and component order. After a connected surface
 acknowledges rendering, the assistant gives the takeaway. Usable layouts save
-automatically without a question. Later, say “Open [the saved title]”; saved
-weather views are also listed on the companion's Saved views panel.
+automatically without a question. Later, use natural wording such as “what about
+later in the week?” while weather is shown, “show me next week's forecast,” or
+“will it rain this weekend?” Matching saved capabilities can skip planning. “Open
+[the saved title]” also works; views are listed on the companion's Saved views panel.
 
 ## Lifecycle and conversation
 
@@ -66,10 +68,40 @@ refreshes through the existing provider/cache. Fixed dates remain fixed.
 
 `weatherViews` is a compatibility projection. Legacy saved IDs are preserved.
 The common library retains up to 64 configurations, deduplicates matching specs,
-and tracks variant lineage. Saved-title recall and explicit saving of the current
-layout are local; nuanced reuse/adaptation still uses the planner. This is a shared
+and tracks variant lineage. Saved-title recall, supported capability matching and
+explicit saving of the current layout are local; new adaptations still use the planner. This is a shared
 policy for assembled experiences, not just weather. See [durable-by-default design](REUSABLE-VIEWS.md)
 for adapter boundaries and non-replayed actions. It is not a self-modifying code system.
+
+### Intent-based quick reuse
+
+The weather adapter parses conversational framing, date range, optional saved city,
+and rain/temperature focus separately. It resolves these against validated saved
+specs; titles are not the semantic key. The transcript prefix `’kay` / `'kay` is
+recognized as conversational framing. Negations and arbitrary prefixes are not
+stripped, and the entire request must match (not a command buried inside chatter).
+
+Implicit follow-ups require the current panel to be weather; explicit weather
+requests can work from another panel. A clarification in progress prevents local
+reuse. Location defaults to the active saved city, and an explicit city must match
+uniquely. Removed places and ambiguous alternatives fall back. Among compatible
+views, the current selected variant wins, then a unique general view, then a sole
+match. New focus/layout/range requirements do not silently reuse an incompatible
+view. Fixed-date views are never substituted for relative date requests.
+
+Newly retained specs become eligible immediately and after restart without another
+planner call or a separate phrase-training step. This is compositional parsing over
+supported intents, not unrestricted semantic understanding or speaker attention
+detection. Unrecognized phrasing still needs the planner. New experience domains
+still require trusted adapters; weather is the implemented domain here.
+
+The voice lane retains its 700 ms quiet window, revision check, and late-delegation
+deduplication. The September 16 `'kay. What about later in the week` fragment replay
+now opens the already saved rain-focused view after that window with zero planner
+calls. Dates and facts bind afresh; stale/partial/missing warnings remain intact.
+149 deterministic tests pass, including paraphrases, rejection cases, restart reuse,
+and the recorded fragment timings. This is an offline replay, not a new measured
+human voice latency result. No paid API call was used to validate this change.
 
 ## Tests and boundaries
 

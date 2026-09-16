@@ -11,6 +11,7 @@ import { AgentsPlanner } from './agents-planner.mjs';
 import { ApiBudget } from './api-budget.mjs';
 import {Weather} from './weather.mjs';
 import {MirrorAudio} from './mirror-audio.mjs';
+import {Wake} from './wake.mjs';
 
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
 const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png' };
@@ -19,7 +20,7 @@ for(const kind of ['cloud','sun','moon','rain','storm','snow','fog']){
   files['/assets/weather/'+kind+'-volume-v1.png']='assets/weather/'+kind+'-volume-v1.png';
 }
 
-export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}, telemetry, assistantOptions,weatherOptions={}, mirrorAudio=null } = {}) {
+export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}, telemetry, assistantOptions,weatherOptions={}, mirrorAudio=null,wakeOptions={} } = {}) {
   const clients = new Set();
   const surfaces=new SurfaceRegistry();
   const session = new Session({ ...sessionOptions, onChange: state => {
@@ -31,6 +32,10 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
   const assistant=assistantOptions?new Assistant({session,surfaces,telemetry,weather,planner:assistantOptions.planner||new AgentsPlanner({budget:new ApiBudget(budgetPath),telemetry})}):undefined;
   const voice = new Voice({ session, telemetry, assistant, budgetPath, ...voiceOptions,
     publish: state => { for (const client of clients) client.write(`event: voice\ndata: ${JSON.stringify(state)}\n\n`); } });
+  const wake=new Wake({voice,mirror:mirrorAudio,...wakeOptions,publish:state=>{
+    telemetry?.start('wake.state',{wake_phase:state.phase,wake_reason:state.reason}).end({outcome:'ok'});
+    for(const client of clients)client.write(`event: wake\ndata: ${JSON.stringify(state)}\n\n`);
+  }});
   const server = http.createServer(async (req, res) => {
     const json = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
     res.setHeader('Cache-Control', 'no-store');
@@ -48,6 +53,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
       }
       if (req.method === 'GET' && path === '/api/state') return json(200, session.state);
       if (req.method === 'GET' && path === '/api/voice') return json(200, voice.state);
+      if(req.method==='GET'&&path==='/api/wake')return json(200,wake.state);
       if(req.method==='GET'&&path==='/api/mirror-audio')return json(200,mirrorAudio?.status()||{connected:false});
       if(req.method==='POST'&&path==='/api/weather'){
         if(req.headers.origin!==localOrigin||!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(403,{error:'Same-origin JSON required'});
@@ -67,12 +73,13 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
         res.writeHead(200, { 'Content-Type': 'text/event-stream', Connection: 'keep-alive' });
         res.write(`data: ${JSON.stringify(session.state)}\n\n`);
         res.write(`event: voice\ndata: ${JSON.stringify(voice.state)}\n\n`);
+        res.write(`event: wake\ndata: ${JSON.stringify(wake.state)}\n\n`);
         clients.add(res);
         const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
         req.on('close', () => { clearInterval(heartbeat); clients.delete(res); });
         return;
       }
-      if (req.method === 'POST' && path.startsWith('/api/voice/')) {
+      if (req.method === 'POST' && (path.startsWith('/api/voice/')||path.startsWith('/api/wake/'))) {
         // Paid voice is Mac-local only, even when the output display is shared on LAN.
         const loopback = ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
         if (!loopback || req.headers.origin !== localOrigin || !origins.includes(req.headers.origin) ||
@@ -80,8 +87,17 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
         let raw=''; for await (const chunk of req) { raw+=chunk; if (Buffer.byteLength(raw)>65536) return json(413,{error:'Request too large'}); }
         let body; try { body=JSON.parse(raw); } catch { return json(400,{error:'Invalid JSON'}); }
         if (!body || typeof body!=='object') return json(400,{error:'Invalid body'});
+        if(path.startsWith('/api/wake/')){
+          try{
+            if(path==='/api/wake/enable'){if(body.test!==undefined&&typeof body.test!=='boolean')throw Error('Invalid test mode');await wake.enable({test:body.test===true});}
+            else if(path==='/api/wake/disable')await wake.disable();
+            else if(path==='/api/wake/end'){if(voice.active?.owner!=='wake')throw Error('No wake conversation is active');await voice.stop(undefined,'user');}
+            else return json(404,{error:'Unknown wake operation'});
+            return json(200,wake.state);
+          }catch(e){return json(409,{error:e.message});}
+        }
         if (path==='/api/voice/start') {
-          try { if(body.device==='mirror'&&!mirrorAudio)throw Error('Mirror audio is unavailable');return json(201,await voice.start(body.sdp,body.device==='mirror'?mirrorAudio:null)); }
+          try { if(wake.state.enabled)throw Error('Turn off wake listening before starting a manual conversation');if(body.device==='mirror'&&!mirrorAudio)throw Error('Mirror audio is unavailable');return json(201,await voice.start(body.sdp,body.device==='mirror'?mirrorAudio:null)); }
           catch (e) { return json(409,{error:e.message}); }
         }
         if (!voice.active || body.token!==voice.active.token) return json(409,{error:'No matching active session'});
@@ -112,8 +128,8 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
       json(404, { error: 'Not found' });
     } catch { if (!res.headersSent) json(500, { error: 'Request failed' }); else res.end(); }
   });
-  return { server, session, voice, weather, close: async () => {
-    try { await weather.close();await voice.stop(undefined,'shutdown'); await assistant?.planner.drain?.(); }
+  return { server, session, voice, weather,wake, close: async () => {
+    try { await wake.close();await weather.close();await voice.stop(undefined,'shutdown'); await assistant?.planner.drain?.(); }
     finally { mirrorAudio?.close();session.close(); for (const client of clients) client.end(); server.close(); await telemetry?.close(); }
   } };
 }
@@ -127,6 +143,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const telemetry=new Telemetry({file:fileURLToPath(new URL('./data/telemetry/events.jsonl',import.meta.url)),env:process.env});
   const mirrorAudio=new MirrorAudio();await mirrorAudio.listen(Number(process.env.MIRROR_AUDIO_PORT||8782));
   const app = createApp({ origins, telemetry, mirrorAudio, assistantOptions:process.env.OPENAI_AGENT_ENABLED==='0'?undefined:{}, sessionOptions: { file: fileURLToPath(new URL('./data/state.json', import.meta.url)) } });
-  app.server.listen(port, host, () => console.log(`Looking Glass: http://localhost:${port}/\nRemote: http://localhost:${port}/remote\nVoice starts only from the Mac companion. Camera off. Bound to ${host}.`));
+  app.server.listen(port, host, () => console.log(`Looking Glass: http://localhost:${port}/\nRemote: http://localhost:${port}/remote\nMicrophone off until manual Start or explicit local wake enable. Camera off. Bound to ${host}.`));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => app.close());
 }

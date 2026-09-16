@@ -61,7 +61,66 @@ export function viewOfferCurrent(state,now){
   const o=state.viewOffer,c=state.weather?.composition;
   return !!o&&o.expiresAt>now&&state.panel==='weather'&&o.compositionId===c?.id&&o.locationId===state.weather.activeId;
 }
+// Compile a whole request into a capability query, not a saved title or an
+// arbitrary substring match. A new phrasing never authorizes new operations.
+const rangeAliases=new Map([
+  ...['later in the week','later this week','later on this week','later on in the week','the rest of the week','rest of the week','the rest of this week','rest of this week','the remainder of this week','the remainder of the week','the remaining days this week'].map(s=>[s,'rest_of_week']),
+  ...['next week','the coming week'].map(s=>[s,'next_week']),
+  ...['this weekend','the weekend','weekend','over the weekend','over this weekend'].map(s=>[s,'weekend']),
+  ...['the next seven days','next seven days','the next 7 days','next 7 days','the week ahead','week ahead','a week ahead'].map(s=>[s,'next_seven_days']),
+]);
+export function weatherReuseRequest(text,state){
+  if(typeof text!=='string'||text.length>300)return null;
+  let s=framing(text),locationId=state.weather?.activeId,explicit=false,focus=null;
+  const places=(state.weather?.locations||[]).filter(p=>[p.name,p.label].some(n=>n&&s.endsWith(' in '+n.toLowerCase())));
+  if(places.length>1)return null;
+  if(places.length===1){
+    const name=[places[0].name,places[0].label].find(n=>n&&s.endsWith(' in '+n.toLowerCase()));
+    locationId=places[0].id;s=s.slice(0,-(' in '+name).length);
+  }
+  s=s.replace(/^(?:what about|how about) /,'');
+  const rain=s.match(/^(?:will it rain|is it going to rain|are we (?:getting|expecting) rain) (.+)$/);
+  const temperature=s.match(/^how (?:warm|hot|cold) (?:will it be|is it going to be) (.+)$/);
+  if(rain||temperature){explicit=true;focus=rain?'rain':'temperature';s=(rain||temperature)[1];}
+  else{
+    s=s.replace(/^(?:show|open|display|bring up|pull up) (?:me )?(?:the )?/,'')
+      .replace(/^(?:tell me|let me see) (?:about )?(?:the )?/,'');
+    const question=s.match(/^what (?:does|will) (.+) (?:look|be) like$/)
+      ||s.match(/^(?:what's|what is) (.+?) (?:going to be |going to look )?like$/)
+      ||s.match(/^(?:how's|how is) (.+?)(?: looking)?$/);
+    if(question)s=question[1];
+    // Both "weather for next week" and "next week's weather", with natural
+    // question wrappers, compile into the same range/focus query.
+    const head=s.match(/^(?:(?:what's|what is|what are|how's|how is) )?(?:the )?(weather|forecast|rain|temperatures?)(?: (?:forecast|outlook))?(?: (?:going to be |going to look )?like)? (?:for |during |over )?(.+)$/);
+    const tail=s.match(/^(.+?)(?:'s)? (weather|forecast|rain|temperatures?)(?: (?:forecast|outlook))?$/);
+    if(head||tail){
+      const domain=head?head[1]:tail[2];s=head?head[2]:tail[1];explicit=true;
+      focus=domain==='rain'?'rain':domain.startsWith('temperature')?'temperature':null;
+    }else{
+      // Pronoun-only weather follow-ups need the current weather surface.
+      s=s.replace(/^(?:what (?:will it|is it going to) be like|what's it like) /,'');
+    }
+  }
+  s=s.replace(/^(?:for|during|over) /,'');
+  const range=rangeAliases.get(s);
+  if(!range||(!explicit&&state.panel!=='weather')||!(state.weather?.locations||[]).some(p=>p.id===locationId))return null;
+  return {range,locationId,focus};
+}
+function reusableWeatherIntent(text,state){
+  const request=weatherReuseRequest(text,state);if(!request)return null;
+  let matches=(state.weatherViews||[]).filter(v=>{
+    try{validateWeatherSpec(v.spec);}catch{return false;}
+    return v.version===1&&v.locationId===request.locationId&&v.spec.range===request.range&&(!request.focus||v.spec.focus===request.focus);
+  });
+  // Keep an already selected matching variant; otherwise use a unique general
+  // view, or a sole matching saved capability. Never guess among alternatives.
+  const current=state.panel==='weather'&&matches.find(v=>v.id===state.weather?.composition?.savedId);
+  if(current)matches=[current];
+  else if(!request.focus){const general=matches.filter(v=>v.spec.focus==='general');if(general.length===1)matches=general;}
+  return matches.length===1?{action:'open_weather_view',viewId:matches[0].id}:null;
+}
 export function savedViewIntent(text,state,now=Date.now()){
+  if(typeof text!=='string'||state.assistant?.status==='clarify')return null;
   const s=framing(text);
   if(state.panel==='weather'&&state.weather?.composition&&/^(?:save it|save this|save this view|keep it|keep this view|no save it|yes save it)$/.test(s.replace(/,/g,'')))return {action:'save_current_view'};
   if(viewOfferCurrent(state,now)){
@@ -69,7 +128,10 @@ export function savedViewIntent(text,state,now=Date.now()){
     if(/^(?:no|no thanks|not now|don't save it|do not save it|just this time)$/.test(s))return {action:'resolve_view_offer',offerId:state.viewOffer.id,choice:'discard'};
   }
   const m=s.match(/^(?:show|open|bring up) (?:my |the )?(.+)$/);
-  if(!m)return null;
-  const matches=(state.weatherViews||[]).filter(v=>v.spec.title.toLowerCase().replace(/^(?:my|the) /,'')===m[1].replace(/^(?:my|the) /,''));
-  return matches.length===1?{action:'open_weather_view',viewId:matches[0].id}:null;
+  if(m){
+    const matches=(state.weatherViews||[]).filter(v=>(state.weather?.locations||[]).some(p=>p.id===v.locationId)&&v.spec.title.toLowerCase().replace(/^(?:my|the) /,'')===m[1].replace(/^(?:my|the) /,''));
+    if(matches.length===1)return {action:'open_weather_view',viewId:matches[0].id};
+    if(matches.length>1)return null;
+  }
+  return reusableWeatherIntent(text,state);
 }

@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test",
-    "traces": "node scripts/trace-report.mjs"
+    "traces": "node scripts/trace-report.mjs",
+    "wake:setup": "sh scripts/setup-wake.sh",
+    "wake:check": "node scripts/check-wake.mjs"
   },
   "engines": {
     "node": ">=22"

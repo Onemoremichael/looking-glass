@@ -53,6 +53,7 @@ if(state.panel==='home')html='<div class="grid"><article><span class="tag">WORKI
   document.getElementById('gators').onclick=function(){send({action:'request',text:'UF Gator sports events this week'});};
   window.GlassSurface.subscribe({
     voice:function(value){window.dispatchEvent(new CustomEvent('glass-voice',{detail:value}));},
+    wake:function(value){window.dispatchEvent(new CustomEvent('glass-wake',{detail:value}));},
     state:function(value){state=value;render();document.getElementById('connection').textContent='Local display connected · camera off';},
     error:function(){document.getElementById('connection').textContent='Disconnected. Reconnecting; displayed state may be stale.';}
   });

@@ -28,7 +28,7 @@ export function framing(text){
   // Only known discourse/politeness prefixes, never arbitrary text before a
   // command. In particular do not strip "no", "but", "if", "don't" or quotes.
   for(let i=0;i<8;i++){
-    const next=s.replace(/^(?:thanks(?: a lot)?|thank you(?: very much)?|okay|ok|alright|all right|great|perfect|cool|now|please|hey|um|uh)(?:[\s,.!?]+|$)/,'')
+    const next=s.replace(/^(?:thanks(?: a lot)?|thank you(?: very much)?|okay|ok|'?kay|alright|all right|great|perfect|cool|now|please|hey|um|uh)(?:[\s,.!?]+|$)/,'')
       .replace(/^would you mind (setting|starting|creating|adding) /,(_,verb)=>({setting:'set',starting:'start',creating:'create',adding:'add'}[verb]+' '))
       .replace(/^(?:(?:can|could|would|will) you |let's |let us |go ahead and |(?:i'd like|i want) you to )/,'');
     if(next===s)break;s=next;
