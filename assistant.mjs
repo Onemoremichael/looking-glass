@@ -13,9 +13,10 @@ export class Assistant {
     if(typeof utterance!=='string'||!utterance.trim()||utterance.length>4000)return {status:'needs_input',message:'I did not catch a request. Please say it again.'};
     const quick=savedViewIntent(utterance,this.session.state,this.session.now());
     if(quick){
+      const revision=this.session.state.revision;
       await beforeCommit();
       if(signal?.aborted)throw Error('Request cancelled');
-      return this.session.commitDecision(id,this.session.state.revision,{status:'execute',outcome:'Use a weather view',message:'Requested',actions:[quick],options:[],selectedOptionId:null},utterance);
+      return this.session.commitDecision(id,revision,{status:'execute',outcome:'Use a weather view',message:'Requested',actions:[quick],options:[],selectedOptionId:null},utterance);
     }
     if(this.weather&&(/weather|forecast|rain|week|weekend/i.test(utterance)||this.session.state.panel==='weather')){
       onProgress({stage:'checking_data'});

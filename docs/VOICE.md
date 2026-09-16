@@ -11,7 +11,8 @@ and microphone permission, but no firmware changes.
 
 The mirror is output-only: clock, selected content, persistent timers and shared
 assistant cards on black. No branding, text input or touch controls. The Mac companion
-owns Start, End, Mute and playback controls. No wake word or automatic microphone start.
+owns Start, End, Mute and playback controls. Optional [local wake listening](WAKE.md)
+can be explicitly armed there; no automatic microphone start on app/server boot.
 
 Start Conversation is listening-first: no greeting, tutorial, capability recital or
 unsolicited question. `prompts/live-instructions.mjs` contains the policy. Prompt and
@@ -171,12 +172,15 @@ not a claim of actual model billing. Platform billing is authoritative; the ledg
 is not a provider-enforced account cap. See [ASSISTANT.md](ASSISTANT.md) for cleanup
 failure guards and recovery. Unrelated account usage is not visible to this ledger.
 
-Live has a three-minute limit and approximately 20-second missing-heartbeat watchdog.
+Live has a three-minute limit. Manual sessions have an approximately 20-second
+missing-companion-heartbeat watchdog. Explicitly armed wake sessions are server-owned,
+with a 10-second conversational idle timeout and standalone spoken end commands.
 Graceful closure waits for final usage; missing usage retains its reservation and
 blocks further Live sessions in that process. Hangup is attempted on failure. A killed
 server cannot guarantee cleanup: end conversations before stopping it.
 
-Audio goes to OpenAI only after Start and browser permission. Delegated requests send
+Audio goes to OpenAI only after manual Start (and browser permission in Mac mode)
+or a detected wake phrase while explicitly armed. Standby audio stays local. Delegated requests send
 app state, recent request/result history and surface context for planning. Camera is
 never requested; no local audio files are written. Owner-approved local transcript
 text logging is enabled during testing; external telemetry stays off. See

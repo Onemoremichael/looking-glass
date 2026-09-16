@@ -6,6 +6,33 @@ const status = document.getElementById('voice-status');
 const audio = document.getElementById('voice-audio');
 const device = document.getElementById('voice-device');
 let run = null;
+let wakeState={enabled:false},serverVoice={phase:'off'};
+const wakeEnable=document.getElementById('wake-enable'),wakeTest=document.getElementById('wake-test'),wakeDisable=document.getElementById('wake-disable');
+async function wakePost(action,body={}){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+  try{const response=await fetch('/api/wake/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+    const value=await response.json();if(!response.ok)throw Error(value.error||'Wake request failed');renderWake(value);return value;
+  }finally{clearTimeout(timer);}
+}
+function renderWake(value){
+  const wasEnabled=wakeState.enabled;
+  wakeState=value;
+  const active=run||!['off','error'].includes(serverVoice.phase);
+  wakeEnable.disabled=wakeTest.disabled=!!value.enabled||!!active;
+  wakeDisable.disabled=!value.enabled;
+  if(!run)start.disabled=!!value.enabled||!!active;
+  const localDetail=value.phase==='starting'?'Preparing local wake detector · microphone off':value.phase==='standby'?'Local wake listening · cloud voice off':value.phase==='connecting'?'Wake detected · connecting…':'Returning to local standby · cloud voice off';
+  if(!run&&!active&&(value.enabled||wasEnabled))paint(value.enabled?'standby':serverVoice.phase,value.enabled?localDetail:serverVoice.detail);
+  const label={starting:'Starting local detector…',standby:'Say “Hey Mirror” · local listening',connecting:'Wake detected · connecting…',conversation:'Conversation active',cooldown:'Returning to local standby…',off:'Wake listening off'}[value.phase]||'Wake listening off';
+  document.getElementById('wake-status').textContent=label+(value.test&&value.enabled?' · test only':'')+(value.enabled?' · '+value.count+'/10 wakes':'')+(value.reason&&value.reason!=='user'?' · '+value.reason.replaceAll('_',' '):'');
+}
+async function wakeClick(action,body){
+  wakeEnable.disabled=wakeTest.disabled=true;
+  try{await wakePost(action,body);}catch(e){document.getElementById('wake-status').textContent=e.message;wakeEnable.disabled=wakeTest.disabled=false;wakeDisable.disabled=false;}
+}
+wakeEnable.onclick=()=>wakeClick('enable',{test:false});wakeTest.onclick=()=>wakeClick('enable',{test:true});wakeDisable.onclick=()=>wakeClick('disable');
+window.addEventListener('glass-wake',e=>renderWake(e.detail));
+fetch('/api/wake').then(r=>r.json()).then(renderWake).catch(()=>{});
 function ownVoice(active){window.dispatchEvent(new CustomEvent('glass-voice-active',{detail:active}));}
 async function post(path,body) {
   const controller=new AbortController();
@@ -54,7 +81,7 @@ async function end() {
   finally { release(r); }
 }
 start.onclick=async()=>{
-  if(run)return;
+  if(run||wakeState.enabled)return;
   if(device.value==='mirror'){
     const r=run={ready:false,muted:false,closing:false,mirror:true};device.disabled=true;start.disabled=true;stop.disabled=false;ownVoice(true);
     paint('connecting','Connecting the Mirror microphone and speakers…');
@@ -138,7 +165,7 @@ start.onclick=async()=>{
     release(r);if(ownsUI)paint('error',detail);
   }
 };
-stop.onclick=()=>void end();
+stop.onclick=()=>{if(!run&&serverVoice.owner==='wake')void wakeClick('end');else void end();};
 mute.onclick=()=>{
   const r=run;if(!r?.ready || r.closing)return;
   if(r.mirror){
@@ -154,10 +181,13 @@ mute.onclick=()=>{
 // HTTP/1 connection, leaving fewer slots for startup and heartbeat requests.
 window.addEventListener('glass-voice',e=>{
   const state=e.detail;
+  serverVoice=state;renderWake(wakeState);
   if(!run){
     const elsewhere=!['off','error'].includes(state.phase);
-    start.disabled=elsewhere;
-    paint(elsewhere?'off':state.phase,elsewhere?'Conversation active in another companion tab. Use that tab to end it.':state.detail);
+    start.disabled=elsewhere||!!wakeState.enabled;
+    stop.disabled=!(elsewhere&&state.owner==='wake');
+    if(!elsewhere&&wakeState.enabled)return; // renderWake already reports the precise local capture state.
+    else paint(elsewhere&&state.owner!=='wake'?'off':state.phase,elsewhere&&state.owner!=='wake'?'Conversation active in another companion tab. Use that tab to end it.':state.detail);
     return;
   }
   if(run&&!run.ready&&state.phase==='connecting')return; // Keep the precise local stage.

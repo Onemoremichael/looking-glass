@@ -230,6 +230,28 @@ test('cached weather reads use the fast lane and factual summary without disturb
   assert.equal(s.state.panel,'weather');assert.equal(s.state.timers.length,1);assert.equal(calls,0);assert.match(c.ws.sent[0].content,/22 degrees Celsius, rain/);
   handoff(c.ws,'late-weather');t.mock.timers.tick(900);assert.equal(c.ws.sent.filter(e=>e.type==='session.commentary.append').length,1);
 });
+test('recorded later-in-week follow-up reuses saved capability at 700ms without planning or duplicate handoff',async t=>{
+  const now=Date.parse('2026-09-16T18:00:00Z');
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now});
+  let calls=0;const c=await controlled(t,{fastTimers:true,assistant:{execute:()=>{calls++;throw Error('No planning for a saved capability');}}});t.after(()=>c.voice.stop());
+  const s=c.voice.session;
+  s.state.weather={locations:[{id:'1',name:'Gainesville',timeZone:'America/New_York'}],activeId:'1',units:'fahrenheit',view:'now',errors:{},forecasts:{'1':{units:'fahrenheit',timeZone:'America/New_York',fetchedAt:now,current:{time:now,temp:88,feels:92,label:'Clear'},hourly:[],daily:Array.from({length:7},(_,i)=>({time:now+i*86400000,high:88,low:70,rain:20,kind:'cloud',label:'Cloudy'}))}}};
+  s.command('compose_weather',{locationId:null,spec:{title:'Later This Week',range:'rest_of_week',startDate:null,endDate:null,focus:'rain',components:['highlights','daily_forecast']}});
+  const id=s.state.weatherViews[0].id;
+  s.command('get_weather',{period:'now',locationId:null});
+  // Actual owner's fragment spacing; the early acknowledgement must not poison
+  // reuse, and a delayed delegation must not repeat the successful operation.
+  for(const [gap,text] of [[0," 'kay"],[2825,'. What'],[201,' about'],[223,' later'],[140,' in the'],[419,' week']]){
+    t.mock.timers.tick(gap);input(c.ws,text,Date.now()-now);
+  }
+  t.mock.timers.tick(699);assert.equal(s.state.weather.view,'now');
+  t.mock.timers.tick(1);assert.equal(s.state.weather.composition.savedId,id);
+  assert.equal(s.state.weather.composition.data.range.start,'2026-09-17');
+  assert.equal(calls,0);assert.equal(s.state.reusableViews.length,1);
+  handoff(c.ws,'late-reuse');t.mock.timers.tick(900);
+  assert.equal(calls,0);assert.equal(c.ws.sent.filter(e=>e.type==='session.commentary.append').length,1);
+  assert.equal(JSON.parse(readFileSync(c.path)).runs.length,1); // only fake Live reservation
+});
 test('recorded Clear the timer flow cancels at +700ms, skips planning and reconciles late delegation',async t=>{
   t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
   let calls=0;const telemetry=new Telemetry();

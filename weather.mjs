@@ -56,7 +56,7 @@ export function weatherIntent(text,weather){
   let s=framing(text),locationId=null;
   const inCity=s.match(/^(.*) in (.+)$/);
   if(inCity){
-    const matches=(weather?.locations||[]).filter(l=>[l.name,l.label].some(n=>n.toLowerCase()===inCity[2]));
+    const matches=(weather?.locations||[]).filter(l=>[l.name,l.label].some(n=>typeof n==='string'&&n.toLowerCase()===inCity[2]));
     if(matches.length!==1)return null;locationId=matches[0].id;s=inCity[1];
   }
   const m=s.match(/^(?:(?:show|open|display|bring up) (?:me )?(?:the )?(?:weather|forecast)|(?:what's|what is|how's|how is) (?:the )?weather(?: like)?|weather|forecast)(?: (?:for )?(now|today|tomorrow|this week))?$/);

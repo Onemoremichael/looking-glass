@@ -27,6 +27,62 @@ test('calendar ranges distinguish next week, later this week, weekend and rollin
   const sunday=Date.parse('2026-11-02T02:00:00Z'); // Sunday in New York after DST change.
   assert.deepEqual(weatherRange(spec,sunday,'America/New_York'),{start:'2026-11-02',end:'2026-11-08'});
 });
+test('saved weather capabilities match varied wording, not titles; ambiguity and unrelated speech fall back',()=>{
+  const s=setup();
+  const fixtures=[
+    ['rest_of_week','general',[
+      "'kay. What about later in the week",'Okay, how about later this week?',
+      'What does the rest of the week look like?', 'How is the remainder of this week looking?',
+      'Show me the weather for later this week','Could you pull up the forecast for the rest of this week?',
+      "What's the weather going to be like later in the week?",'What will it be like later this week?',
+      'Tell me about the forecast for the remaining days this week',
+    ]],
+    ['next_week','general',["Show me next week's forecast",'What will next week be like?',"What's next week going to look like?",'Forecast for next week','What about next week?']],
+    ['weekend','rain',['Will it rain this weekend?','Is it going to rain this weekend?','Are we expecting rain over the weekend?','Show me the rain forecast for this weekend']],
+    ['next_seven_days','temperature',['How warm will it be over the next seven days?','Temperatures for the next 7 days','Show the week ahead temperature forecast']],
+  ];
+  for(const [range,focus,phrases] of fixtures){
+    s.command('compose_weather',{...action,spec:{...spec,title:'Unrelated title '+range,range,focus}});
+    const view=s.state.weatherViews.at(-1);
+    for(const phrase of phrases)assert.deepEqual(savedViewIntent(phrase,s.state,now),{action:'open_weather_view',viewId:view.id},phrase);
+  }
+  for(const phrase of ['Do not show weather next week','Maybe later this week','What about next week and cancel the timer',
+    'My wife said show weather next week','What about last week','What about later this week in Paris',
+    'Show a completely different layout for later this week','Next weekend','Next week or this weekend'])assert.equal(savedViewIntent(phrase,s.state,now),null,phrase);
+  s.command('show',{panel:'todos'});
+  assert.equal(savedViewIntent('What about next week?',s.state,now),null);
+  assert.ok(savedViewIntent('Show me next week\'s forecast',s.state,now));
+  s.state.assistant={status:'clarify'};
+  assert.equal(savedViewIntent('Forecast for next week',s.state,now),null);
+});
+test('reused capabilities bind location and focus; multiple alternatives do not pick arbitrarily',()=>{
+  const s=setup();const rest={...spec,title:'Later This Week',range:'rest_of_week'};
+  s.command('compose_weather',{...action,spec:rest});const rain=s.state.weatherViews[0];
+  // The reported existing rain-focused layout remains eligible for a general
+  // range request when it is the sole matching saved experience.
+  s.command('get_weather',{period:'now',locationId:null});
+  assert.equal(savedViewIntent('What about later in the week',s.state,now).viewId,rain.id);
+  s.command('compose_weather',{...action,spec:{...rest,title:'Temperature',focus:'temperature'}});
+  s.command('get_weather',{period:'now',locationId:null});
+  assert.equal(savedViewIntent('What about later this week',s.state,now),null);
+  assert.equal(savedViewIntent('Will it rain later this week',s.state,now).viewId,rain.id);
+  s.state.weather.locations.push({id:'2',name:'Boston',timeZone:'America/New_York'});s.state.weather.activeId='2';
+  assert.equal(savedViewIntent('Rain later this week',s.state,now),null);
+  assert.equal(savedViewIntent('Rain later this week in Gainesville',s.state,now).viewId,rain.id);
+  s.state.weather.locations=s.state.weather.locations.filter(p=>p.id!=='1');
+  assert.equal(savedViewIntent('Open Later This Week',s.state,now),null);
+});
+test('newly saved capability becomes reusable after restart without another planning call',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'glass-reuse-routing-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const file=join(dir,'state.json'),s=setup({file});let calls=0;
+  const a=new Assistant({session:s,planner:{decide:async()=>{calls++;return decision([{...action,spec:{...spec,range:'rest_of_week'}}]);}}});
+  await a.execute('new','What about later in the week');assert.equal(calls,1);
+  const reloaded=new Session({file,now:()=>now});
+  const reuse=new Assistant({session:reloaded,planner:{decide:async()=>{throw Error('Should reuse, not plan');}}});
+  await reuse.execute('again',"'kay. What about later in the week");
+  assert.equal(reloaded.state.weather.composition.savedId,reloaded.state.weatherViews[0].id);
+  assert.equal(reloaded.state.reusableViews.length,1);
+});
 test('compositions validate component vocabulary, actual dates, and bounded non-touch ranges',()=>{
   validateDecision(decision());validateWeatherSpec(spec);
   for(const bad of [{components:['html']},{components:['daily_forecast','daily_forecast']},{script:'alert(1)'},{range:'dates',startDate:'2026-02-30',endDate:'2026-03-01'},{range:'dates',startDate:'2026-09-16',endDate:'2026-10-01'}])assert.throws(()=>validateWeatherSpec({...spec,...bad}));

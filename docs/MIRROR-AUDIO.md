@@ -30,7 +30,8 @@ End with the companion. Mute suppresses input, not billing or playback. Sessions
 still cap at three minutes. Both USB tunnels must be recreated after reconnect or
 reboot. The audio-enabled intent is intentionally not saved: ordinary Afterglow
 launches remain display-only. Leaving its Activity releases capture/playback.
-No boot service, wake word, camera capture or automatic paid-session restart.
+No boot service, camera capture or automatic paid-session restart. Optional
+[local wake mode](WAKE.md) has separate explicit arming and server-owned lifecycle.
 
 ## Implementation and privacy
 
@@ -40,8 +41,14 @@ No boot service, wake word, camera capture or automatic paid-session restart.
   byte type + uint32 big-endian length + bounded payload. Version/rate handshake;
   one native endpoint. This is not HTTP or a public network protocol.
 - Frames: 1 hello JSON, 2 input PCM (640 bytes), 3 numeric diagnostics, 4 ping;
-  server: 10 start, 11 stop, 12 mute flag, 13 output PCM, 14 pong.
-- Idle bridge does not open audio devices. A native teal listening / gold reply
+  server: 10 start, 11 stop, 12 mute flag, 13 output PCM, 14 pong, 15 local mode
+  (byte 0 standby / 1 connecting). Updated hello includes `wake:true`; type 6
+  acknowledges fresh conversation capture so old standby PCM cannot be forwarded.
+  Server frame 16 carries a local readiness chime with a short 60 ms microphone
+  gate, rather than the 350 ms speech-reply echo tail.
+- Disarmed bridge does not open audio devices. Explicit wake standby opens local
+  capture and shows a static “Hey Mirror” label; startup shows “Connecting”.
+  A native teal listening / gold reply
   waveform is visible during capture; muted input shows a static amber pause mark
   and “Muted” label. Motion follows audio levels and respects disabled Android
   animations. End hides it. Mute and playback gating replace samples with silence;
@@ -51,8 +58,10 @@ No boot service, wake word, camera capture or automatic paid-session restart.
   too, which must not suppress the user's microphone indefinitely.
 - Mac uses the official Live primary WebSocket: `gpt-live-1`, Marin, `store:false`.
   Both adapters reuse transcript routing, fast actions, planner, budget and closure.
-- Companion heartbeat remains the 20-second paid-session lease. Native keepalive
-  cannot extend it. USB loss stops the session; native socket read timeout is 5s.
+- Companion heartbeat remains the 20-second paid-session lease for manual starts.
+  Wake sessions use explicit server ownership plus idle/absolute limits instead.
+  Native keepalive cannot extend a companion lease. USB loss stops the session;
+  native socket read timeout is 5s.
 - Frames/queues are bounded; slow endpoints disconnect rather than accumulate audio.
   Keys stay on the Mac. No firmware/driver changes.
 - No authentication/encryption on this **loopback/USB-only** channel. Do not expose

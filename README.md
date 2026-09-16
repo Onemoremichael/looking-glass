@@ -34,7 +34,7 @@ The mirror is output-only: no forms, buttons, links, or touch navigation.
 The phone/computer companion owns all current controls and shares state with the
 display. Voice can use the Mac or the native USB Mirror audio bridge. Active timers
 stay visible across panels. The mirror has a small active-conversation indicator,
-hidden when voice is off. Setup controls remain on the companion. A lost display
+hidden when capture is off, with a static label during local wake standby. Setup controls remain on the companion. A lost display
 connection still shows a stale-data warning.
 
 ## Working now
@@ -48,6 +48,8 @@ connection still shows a stale-data warning.
 - Adaptive future-weather views: the planner assembles highlights, temperature ranges,
   and dated forecasts, automatically saving the layout in the shared repertoire. Saved
   views reuse their configuration with refreshed facts and re-resolved relative dates.
+  Natural follow-ups match saved date range, location and focus, not just titles:
+  “what about later in the week?” can take the local quick path while weather is shown.
   See [adaptive views and voice test flow](docs/ADAPTIVE-VIEWS.md).
 - State saved atomically to ignored `data/state.json`; restart preserves items.
 - Request capture and an example clarification flow for Gators sports.
@@ -96,6 +98,12 @@ For the Mirror's mic/speakers, select **Mirror · USB** after installing the nat
 bridge and setting up both USB tunnels. See [setup and current limits](docs/MIRROR-AUDIO.md).
 Android 6.0.1 remains supported; Android 7 is not required. Mirror mode is currently
 half-duplex: wait for replies to finish before speaking. See [voice UX](docs/VOICE.md).
+
+**Hands-free Mirror:** [set up local “Hey Mirror” detection](docs/WAKE.md), then
+enable it explicitly in the companion. Standby audio stays on the Mac; wake starts
+a bounded Live session on the Mirror mic/speakers. Wait for the chime, ask, and say
+“That’s all” to return to standby. A local-only phrase-test mode avoids API charges.
+No camera or automatic arming at startup. Turn wake microphone off to stop capture.
 
 ## API setup and remaining connections
 
@@ -162,7 +170,8 @@ HOST=0.0.0.0 LAN_ORIGINS=http://192.168.0.29:8780 npm start
 No pairing key. Anyone with network access to this service can view and control
 its local data. Do not expose it publicly. Origin/Host checks are not authentication.
 Paid voice routes reject non-loopback clients even when the display is LAN-shared.
-Phone voice and Mirror audio need a separate transport/access implementation.
+Phone voice needs a separate transport/access implementation; Mirror audio uses
+the loopback-only native USB bridge, not the browser or a public audio endpoint.
 
 ## Architecture
 

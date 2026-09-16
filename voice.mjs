@@ -5,13 +5,16 @@ import { randomUUID } from 'node:crypto';
 import { ApiBudget } from './api-budget.mjs';
 import { VoiceTools } from './voice-tools.mjs';
 import { noTelemetry } from './telemetry.mjs';
-import { liveInstructions } from './prompts/live-instructions.mjs';
+import { liveInstructions,wakeInstructions } from './prompts/live-instructions.mjs';
 import { analyzeTimerIntent, TIMER_QUIET_MS } from './timer-intent.mjs';
 import {analyzeQuickAction} from './quick-actions.mjs';
 import {weatherIntent} from './weather.mjs';
 import {trackTaskProgress} from './task-progress.mjs';
 import {savedViewIntent} from './weather-composition.mjs';
 import {assistantFailureMessage} from './agent-recovery.mjs';
+
+export function isConversationEnd(text){return /^(?:(?:ok(?:ay)?|thanks|thank you)[,.!]?\s+)?(?:that['’]?s all|end (?:the )?conversation|stop listening|goodbye)(?:[,.!]?\s+(?:thanks|thank you|mirror))?[.!?\s]*$/i.test(text.trim());}
+export function wakeIdle(a,now){return a.owner==='wake'&&!!a.readyAt&&!a.pending&&!a.job&&now-Math.max(a.readyAt,a.lastInput,a.lastOutput,a.lastAudible||0)>=10000;}
 
 export class Voice {
   constructor({ session, budgetPath, publish = () => {}, clientFactory, attachFactory, telemetry=noTelemetry, assistant, fastTimers=process.env.OPENAI_TIMER_FAST_PATH!=='0', learnedFast=process.env.OPENAI_LEARNED_FAST_PATH!=='0' } = {}) {
@@ -28,7 +31,8 @@ export class Voice {
     if(phase!==this.state.phase)this.active?.trace?.event('phase',{phase});
     this.state = { ...this.state, phase, detail }; this.publish(this.state);
   }
-  async start(sdp, mirror=null) {
+  async start(sdp, mirror=null, {owner='companion'}={}) {
+    if(owner!=='companion'&&(!mirror||owner!=='wake'))throw Error('Invalid voice owner');
     if (this.active || this.blocked) throw Error('A voice session is active or needs finalization review.');
     if (!mirror && (typeof sdp !== 'string' || !sdp.startsWith('v=0') || sdp.length > 60000)) throw Error('Invalid SDP offer');
     if(mirror&&!mirror.status().connected)throw Error('Mirror audio bridge is not connected');
@@ -36,10 +40,10 @@ export class Voice {
     const a = this.active = { token:randomUUID(), client, budgetId:this.budget.reserve(mirror?'live-mirror':'live-webrtc'), tools:new VoiceTools(this.session),
       transcript:[], seen:new Set(), delegations:new Set(), acknowledged:new Set(), fastReceipts:[], cursor:0, lastInput:0, lastOutput:0, lastBeat:Date.now(), started:Date.now(), closing:false, finalized:false };
     a.trace=this.telemetry.start('voice.session');a.startupTrace=this.telemetry.start('voice.startup',{},a.trace);
-    a.mirror=mirror;this.state.device=mirror?'mirror':'mac';
+    a.mirror=mirror;a.owner=owner;this.state.owner=owner;this.state.stopReason=null;this.state.device=mirror?'mirror':'mac';
     this.state.muted = false; this.update('connecting','Connecting to GPT-Live-1');
     a.lease = setInterval(() => {
-      const reason=Date.now()-a.started > 180000 ? 'duration_limit':Date.now()-a.lastBeat > 20000 ? 'lease_expired':null;
+      const reason=Date.now()-a.started > 180000 ? 'duration_limit':wakeIdle(a,Date.now())?'idle_timeout':owner==='companion'&&Date.now()-a.lastBeat > 20000 ? 'lease_expired':null;
       if(reason){a.trace.event('watchdog',{reason});void this.stop(a.token,reason);}
     },1000);
     try {
@@ -73,7 +77,10 @@ export class Voice {
   }
   async startMirror(a){
     a.ws=this.primaryFactory?this.primaryFactory(a.client):new LiveWS(a.client,{reconnect:null,handshakeTimeout:10000});
-    a.ws.on('event',e=>{this.event(a,e);if(e.type==='session.output_audio.delta'&&!a.closing){try{a.mirror.output(e.delta);}catch{void this.stop(a.token,'audio_backpressure');}}});
+    a.ws.on('event',e=>{this.event(a,e);if(e.type==='session.output_audio.delta'&&!a.closing){try{
+      const pcm=Buffer.from(e.delta,'base64');for(let i=0;i+1<pcm.length;i+=2){if(Math.abs(pcm.readInt16LE(i))>180){a.lastAudible=Date.now()+pcm.length/32;break;}}
+      a.mirror.output(e.delta);
+    }catch{void this.stop(a.token,'audio_backpressure');}}});
     a.ws.on('error',()=>void this.stop(a.token,'transport_error'));
     a.ws.socket.on('close',()=>{if(!a.finalized&&!a.closing)void this.stop(a.token,'transport_error');});
     a.onAudio=data=>{if(!a.closing&&a.ws.socket.readyState===1)a.ws.send({type:'session.input_audio.append',audio:data.toString('base64')});};
@@ -85,10 +92,10 @@ export class Voice {
       const close=()=>finish(Error('Mirror voice connection closed'));
       const finish=error=>{clearTimeout(timeout);a.ws.off('event',event);a.ws.socket.off('close',close);error?reject(error):resolve();};
       a.ws.on('event',event);a.ws.socket.on('close',close);
-      a.ws.send({type:'session.start',session:{model:'gpt-live-1',store:false,audio:{format:{type:'audio/pcm',rate:16000},output:{voice:'marin'}},delegation:{type:'client'},instructions:liveInstructions}});
+      a.ws.send({type:'session.start',session:{model:'gpt-live-1',store:false,audio:{format:{type:'audio/pcm',rate:16000},output:{voice:'marin'}},delegation:{type:'client'},instructions:liveInstructions+(a.owner==='wake'?wakeInstructions:'')}});
     });
     if(a.closing)throw Error('Connection cancelled');
-    a.mirror.on('audio',a.onAudio);a.mirror.start();a.lastBeat=Date.now();
+    a.mirror.on('audio',a.onAudio);a.mirror.start();a.lastBeat=Date.now();a.readyAt=Date.now();
     a.startupTrace.end({outcome:'ok'});this.update('listening','Mirror microphone · listening');
     return {token:a.token,device:'mirror',maxSeconds:180};
   }
@@ -123,8 +130,14 @@ export class Voice {
         job.controller.signal.addEventListener('abort',job.releaseInput,{once:true});
       }
       this.telemetry.transcript(a.trace,'user',e.delta);
+      if(Date.now()-a.lastInput>1400)a.endUtterance='';
+      a.endUtterance=(a.endUtterance||'')+e.delta;
       a.transcript.push({ text:e.delta, start:e.start_ms, end:e.end_ms });
       a.lastInput = Date.now();
+      clearTimeout(a.endTimer);
+      if(a.owner==='wake')a.endTimer=setTimeout(()=>{
+        if(this.active===a&&!a.closing&&isConversationEnd(a.endUtterance))void this.stop(a.token,/stop listening/i.test(a.endUtterance)?'spoken_disable':'spoken_end');
+      },600);
       this.scheduleTimer(a);
       if (a.pending) this.schedule(a);
     }
@@ -314,7 +327,7 @@ export class Voice {
   async stop(token,reason='user') {
     const a = this.active; if (!a || (token && token !== a.token)) return;
     if (a.closing) return a.stopping;
-    a.closing = true; a.mirror?.stop(); a.job?.controller.abort(); clearTimeout(a.work); clearTimeout(a.fastWork); clearInterval(a.lease); this.update('stopping','Closing voice session');
+    a.closing = true;this.state.stopReason=reason; a.mirror?.stop(); a.job?.controller.abort(); clearTimeout(a.endTimer);clearTimeout(a.work); clearTimeout(a.fastWork); clearInterval(a.lease); this.update('stopping','Closing voice session');
     a.workTrace?.end({outcome:'cancelled'});a.workTrace=null;
     a.closeTrace=this.telemetry.start('voice.close',{reason},a.trace);
     a.stopping = (async () => {
@@ -337,7 +350,7 @@ export class Voice {
     a.job?.controller.abort();
     a.startupTrace?.end({outcome:a.finalized?'ok':'cancelled'});
     a.workTrace?.end({outcome:'cancelled'});
-    clearInterval(a.lease); clearTimeout(a.work); clearTimeout(a.fastWork); clearTimeout(a.closeTimer); a.resolveStop?.();
+    clearInterval(a.lease); clearTimeout(a.endTimer);clearTimeout(a.work); clearTimeout(a.fastWork); clearTimeout(a.closeTimer); a.resolveStop?.();
     if (this.active===a) this.active=null;
     a.ws?.close(); a.transcript=[];
   }
