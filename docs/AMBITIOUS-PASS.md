@@ -47,6 +47,14 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    were verified in the browser; 215 offline tests pass. Live model generation,
    spoken reuse, broader integrations and physical layout acceptance remain
    unverified. See [custom functions](CUSTOM-FUNCTIONS.md).
+   **Conversational reuse:** successful numeric utterances now promote bounded
+   typed-slot routes tied to the saved specification. Named fresh-input requests,
+   one-at-a-time questions and short current-function follow-ups bypass planning
+   when unambiguous. Context expires/invalidation prevents stale shorthand;
+   conflicts and unsupported wording still require reasoning. 226 offline tests
+   pass. Two Android framebuffer pages and companion input/paging were inspected;
+   local reuse measured 31–32 ms in the fixture (not voice latency). Paid/spoken
+   end-to-end acceptance remains pending; no new API spend or microphone capture.
 5. **Integration/polish** — pending: expectation-setting, timer language gaps,
    wake calibration, microphone/speaker replay, restart/reuse verification.
 

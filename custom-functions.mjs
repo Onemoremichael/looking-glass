@@ -1,6 +1,7 @@
 import {Worker} from 'node:worker_threads';
 import {randomUUID,createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
+import {analyzeFunctionReuse,promoteFunctionRoute} from './function-reuse.mjs';
 
 const str=n=>({type:'string',minLength:1,maxLength:n});
 const obj=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
@@ -61,11 +62,7 @@ export function evaluateFunction(code,inputs,{signal,timeoutMs=2500}={}){
   });
 }
 export function functionIntent(utterance,state){
-  const text=String(utterance).toLowerCase().replace(/[.!?]/g,'').trim();
-  if(state.panel==='functions'&&state.customView?.output&&/^(?:next|previous)(?: page)?$/.test(text))return {action:'function_page',direction:text.startsWith('next')?'next':'previous'};
-  const match=text.match(/^(?:open|show|run)(?: me)? (?:my |the )?(.+?)(?: function)?$/);if(!match)return null;
-  const entries=(state.reusableViews||[]).filter(v=>v.kind==='function'&&v.spec.title.toLowerCase()===match[1]);
-  return entries.length===1?{action:'open_function',viewId:entries[0].id}:null;
+  return analyzeFunctionReuse(utterance,state).action;
 }
 export class CustomFunctions{
   constructor({session,telemetry,evaluate=evaluateFunction}){Object.assign(this,{session,telemetry,evaluate});this.active=null;this.closed=false;}
@@ -75,7 +72,7 @@ export class CustomFunctions{
     const prior=(this.session.state.assistantReceipts||[]).find(r=>r.id===requestId);if(prior)return prior.result;
     if(this.active)throw Error('A function is already being checked');
     if(revision!==this.session.state.revision)throw Error('Display changed while deciding');
-    if(!['create_function','run_function','open_function','function_page'].includes(action.action))throw Error('Unknown function action');
+    if(!['create_function','run_function','open_function','prepare_function','function_page'].includes(action.action))throw Error('Unknown function action');
     const source=action.action==='create_function'?null:(this.session.state.reusableViews||[]).find(v=>v.kind==='function'&&v.id===action.viewId);
     if(action.action!=='create_function'&&action.action!=='function_page'&&!source)throw Error('Saved function not found');
     const spec=action.action==='function_page'?null:structuredClone(source?.spec||action.spec);if(spec)validateFunctionSpec(spec);
@@ -84,6 +81,12 @@ export class CustomFunctions{
     let span;try{span=this.telemetry?.start('function.execute',{});}catch{}
     const work=(async()=>{
       let output,input;
+      if(action.action==='prepare_function'){
+        const partial=parse(action.inputJSON,8000);
+        if(!partial||typeof partial!=='object'||Array.isArray(partial)||Object.keys(partial).some(k=>!spec.inputs.some(i=>i.name===k)))throw Error('Unknown function input');
+        input=functionInput({...spec,inputs:spec.inputs.filter(i=>Object.hasOwn(partial,i.name))},action.inputJSON);
+        if(Object.keys(input).length===spec.inputs.length)throw Error('Complete inputs must execute the function');
+      }
       if(['create_function','run_function'].includes(action.action)){
         input=functionInput(spec,action.inputJSON);
         const cases=spec.tests.map(t=>functionInput(spec,t.inputJSON));
@@ -107,13 +110,17 @@ export class CustomFunctions{
           if(s.panel!=='functions'||!s.customView?.output||!['next','previous'].includes(action.direction))throw Error('No function pages are active');
           const last=Math.ceil(s.customView.spec.layout.blocks.length/2)-1;
           s.customView.page=Math.max(0,Math.min(last,s.customView.page+(action.direction==='next'?1:-1)));
+          s.customView.interactionRevision=s.revision+1;s.customView.createdAt=this.session.now();
           result={status:'completed',action:'assistant',message:'Function page '+(s.customView.page+1)+' of '+(last+1)+'.',executedActions:['function_page']};
         }else{
-          s.customView={id:randomUUID(),functionId:saved.id,spec,input:input||null,output:output||null,page:0,createdAt:this.session.now(),sourceHash:createHash('sha256').update(spec.code).digest('hex'),testsPassed:output?spec.tests.length:0};
-          result={status:output?'completed':'needs_input',action:'assistant',functionId:saved.id,compositionId:s.customView.id,executedActions:output?[action.action]:[],functionVerified:!!output,functionOutput:output||null,message:output?'Result computed and saved for reuse. Example tests passed; this is not an independent correctness certification. '+spec.layout.blocks.map(b=>b.label+': '+JSON.stringify(output[b.key])).join('. '):'What values should I use? '+spec.inputs.map(i=>i.label+' ('+i.type+')').join(', ')};
+          const missing=spec.inputs.filter(i=>!input||!Object.hasOwn(input,i.name));
+          const question=missing.length?(/\?$/.test(missing[0].label.trim())?missing[0].label:'What should I use for '+missing[0].label+'?'):'Ready to calculate.';
+          s.customView={id:randomUUID(),functionId:saved.id,spec,input:input||null,output:output||null,question:output?null:question,page:0,createdAt:this.session.now(),interactionRevision:s.revision+1,sourceHash:createHash('sha256').update(spec.code).digest('hex'),testsPassed:output?spec.tests.length:0};
+          const promoted=output&&this.session.learnQuickActions&&promoteFunctionRoute(s,saved,input,utterance,this.session.now());
+          result={status:output?'completed':'needs_input',action:'assistant',functionId:saved.id,compositionId:s.customView.id,executedActions:output?[action.action]:[],functionVerified:!!output,functionOutput:output||null,routePromoted:!!promoted,message:output?'Calculated using '+spec.inputs.map(i=>i.label+': '+JSON.stringify(input[i.name])).join(', ')+'. '+spec.layout.blocks.map(b=>b.label+': '+JSON.stringify(output[b.key])).join('. ').slice(0,800)+'. The recipe is saved; example tests passed, not independent correctness certification.':question};
         }
         s.panel='functions';s.assistant=null;s.viewOffer=null;s.message='';
-        s.assistantHistory=[...(s.assistantHistory||[]),{user:utterance,assistant:result.message,outcome:spec?.outcome||'View result',status:output?'execute':'clarify'}].slice(-8);
+        s.assistantHistory=[...(s.assistantHistory||[]),{user:utterance,assistant:result.message,outcome:spec?.outcome||'View result',status:result.status==='needs_input'?'clarify':'execute'}].slice(-8);
         for(const r of s.workflows||[])for(const step of r.steps)if(step.operationId===requestId)step.receipt=structuredClone(result);
         s.assistantReceipts=[...(s.assistantReceipts||[]),{id:requestId,result}].slice(-500);s.revision++;this.session.save();
       }catch(e){this.session.state=before;throw e;}

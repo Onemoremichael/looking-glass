@@ -20,9 +20,47 @@ Recipes live in ignored `data/state.json` under `reusableViews` with kind
 prior work. Workflow custom steps advance only with actual function execution
 evidence, saved alongside the step for crash-window recovery.
 
-Companion controls run saved calculations without an AI call. Simple title-based
-opening and page navigation are local; arbitrary spoken input binding can still
-require the planner. Saving a recipe does not guarantee every wording is fast.
+Companion controls run saved calculations without an AI call. Title-based
+opening, bounded learned wording, input questions and contextual follow-ups can
+also run locally. Arbitrary spoken input binding can still require the planner.
+Saving a recipe does not guarantee every wording is fast.
+
+## Conversational reuse
+
+After successful execution, eligible numeric requests teach literal-token/typed-
+slot routes in `functionRoutes`. For example, a verified “Pack snacks for six
+people” can match “Please pack snacks for nine people” or “Could you pack snacks
+for twenty-one people?” The app derives slots from actual validated input values,
+not a model-authored regex. All numeric inputs must match distinct, explicit
+numbers in the original request. An additional successful wording can teach an
+additional route. Units and intent-bearing words are not discarded.
+
+- Routes are fingerprinted to the complete saved function specification. Changed
+  code/layout/input contracts invalidate old routes; two matching recipes are
+  ambiguous and use planning instead. Up to 128 routes are retained without
+  evicting existing routes. The learned-fast-path opt-out applies.
+- While a function is active, “What about nine?” can change its sole input;
+  “What if width is eight?” changes that named input while preserving the other
+  values in the **current** result. Tool results include the bound values so the
+  voice agent can explain which assumptions were kept.
+- “Run rectangle area with width nine” starts fresh, asks for length, and retains
+  that answer. Opening a function asks one missing input at a time. Bare scalar
+  replies are accepted only for the current missing-input question; an unrelated
+  number cannot rerun a completed result.
+- Context lasts two minutes from the last function interaction. Navigation,
+  unrelated state changes, a conflicting clarification, playroom mode and app
+  restart invalidate short contextual replies. Durable explicit routes survive
+  restart; conversational focus does not.
+- Named boolean values and short quoted text are supported in focused input
+  collection. Unquoted free text, complex arithmetic, unknown units, corrections,
+  compound requests and uncertain wording use contextual planning. This is a
+  bounded accelerator, not universal semantic similarity or speaker detection.
+
+Reuse still validates inputs, reruns example tests and executes the saved code in
+QuickJS. It skips planner regeneration, not validation. The voice transport still
+needs to deliver the request to the assistant; this does not eliminate wake,
+transcription, delegation or spoken-response latency. `function.reuse` traces
+report local duration and route source without exporting input values or text.
 
 ## Boundaries
 
@@ -54,12 +92,29 @@ The dependency is pinned to `quickjs-emscripten` 0.32.0.
 
 ## Verification — September 16, 2026
 
-- `npm test`: 215 passing tests, including 15 custom-function tests using the real
+- `npm test`: 226 passing tests, including 26 custom-function/reuse tests using the real
   QuickJS worker, cancellation, resource exhaustion, storage rollback, restart
   reuse, workflow receipts, escaped output and companion request recovery.
 - Browser fixture: changed picnic headcount from six to nine, observed 18 snacks,
   nine water bottles and 27 napkins; Next displayed the second result page.
 - `node scripts/preview-functions.mjs` runs that isolated, in-memory fixture at
   `http://localhost:8784/remote`; no paid API or microphone is used.
-- Live model-authored function generation, spoken end-to-end reuse and physical
-  Mirror acceptance remain unverified. No new paid API calls were made this pass.
+- Reuse fixture accepted “Pack snacks for nine people” and “What about twelve?”
+  in 31 ms and 32 ms respectively on the development Mac. These are illustrative
+  local timings, not voice-latency measurements or performance guarantees.
+- Android 6 Mirror framebuffer inspection confirmed large result text, bars and
+  companion-driven pagination. [First page](evidence/function-reuse-page1.png)
+  shows the nine-person result; [second page](evidence/function-reuse-page2.png)
+  shows the later four-person result. Reflection contrast and maximum-length
+  content were not tested in this fixture.
+- Live model-authored function generation and spoken end-to-end reuse remain
+  unverified. No new paid API calls or microphone capture were used this pass.
+
+Reproduce the local follow-up fixture:
+
+```sh
+node scripts/preview-functions.mjs 'Pack snacks for nine people' 'What about twelve?' 'Open a little picnic math'
+```
+
+The fixture rejects planner fallback, so success proves local routing rather than
+an unseen inference call. The production state is not used or modified.

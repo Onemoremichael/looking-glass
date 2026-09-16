@@ -6,7 +6,7 @@ import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {gameIntent} from './playroom.mjs';
 import {imageIntent} from './image-studio.mjs';
 import {workflowIntent} from './workflows.mjs';
-import {functionIntent} from './custom-functions.mjs';
+import {analyzeFunctionReuse} from './function-reuse.mjs';
 export class Assistant {
   constructor({session,planner,surfaces,telemetry,weather,studio}){Object.assign(this,{session,planner,surfaces,telemetry,weather,studio});this.inflight=new Map();}
   execute(id,utterance,{signal,trace,onProgress=()=>{},beforeCommit=async()=>{},workflowContext=null,guardDecision=()=>{}}={}) {
@@ -23,7 +23,8 @@ export class Assistant {
       return this.session.commitDecision(id,revision,{status:'execute',outcome:'Continue game',message:'Game answer',actions:[action],options:[],selectedOptionId:null},'');
     }
     let researchRequest=null;
-    let quick=(!workflowContext&&this.workflows?workflowIntent(utterance,this.session.state):null)||(this.functions?functionIntent(utterance,this.session.state):null)||imageIntent(utterance,this.session.state)||researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
+    const functionReuse=this.functions?analyzeFunctionReuse(utterance,this.session.state,this.session.now(),{learned:this.session.learnQuickActions}):{action:null};
+    let quick=(!workflowContext&&this.workflows?workflowIntent(utterance,this.session.state):null)||functionReuse.action||imageIntent(utterance,this.session.state)||researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
     if(quick?.action==='open_research_view'){
       const cached=this.session.state.researchCache?.find(b=>b.savedId===quick.viewId);
       if(quick.refresh||!cached||this.session.now()-cached.fetchedAt>=RESEARCH_FRESH_MS){
@@ -35,7 +36,11 @@ export class Assistant {
       await beforeCommit();
       if(signal?.aborted)throw Error('Request cancelled');
       guardDecision({status:'execute',actions:[quick]});
-      if(['open_function','function_page'].includes(quick.action))return this.functions.handle(id,quick,{revision,utterance,signal});
+      if(['run_function','prepare_function','open_function','function_page'].includes(quick.action)){
+        let span;try{span=this.telemetry?.start('function.reuse',{source:functionReuse.source},trace);}catch{}
+        try{const result=await this.functions.handle(id,quick,{revision,utterance,signal});try{span?.end({outcome:result.status});}catch{}return result;}
+        catch(e){try{span?.end({outcome:signal?.aborted?'cancelled':'error'});}catch{}throw e;}
+      }
       if(quick.action.endsWith('_workflow'))return this.workflows.handle(id,quick,{revision,utterance});
       return this.session.commitDecision(id,revision,{status:'execute',outcome:'Use a saved view',message:'Requested',actions:[quick],options:[],selectedOptionId:null},utterance);
     }
