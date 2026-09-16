@@ -167,7 +167,7 @@ start.onclick=async()=>{
 };
 stop.onclick=()=>{if(!run&&serverVoice.owner==='wake')void wakeClick('end');else void end();};
 mute.onclick=()=>{
-  const r=run;if(!r?.ready || r.closing)return;
+  const r=run;if(!r?.ready || r.closing || r.finishing)return;
   if(r.mirror){
     r.muted=!r.muted;post('mute',{token:r.token,muted:r.muted}).catch(()=>void end());
     mute.textContent=r.muted?'Unmute microphone':'Mute microphone';mute.setAttribute('aria-pressed',String(r.muted));paint(r.muted?'muted':'listening');return;
@@ -191,6 +191,10 @@ window.addEventListener('glass-voice',e=>{
     return;
   }
   if(run&&!run.ready&&state.phase==='connecting')return; // Keep the precise local stage.
+  if(state.finishing){
+    run.finishing=true;run.muted=true;mute.disabled=true;
+    run.stream?.getTracks().forEach(t=>t.stop());
+  }
   paint(state.phase,state.detail);
   if(run?.token&&state.phase==='off'){run.closing=true;release(run);}
   else if(run&&state.phase==='error')void end();

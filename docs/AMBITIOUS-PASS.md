@@ -42,6 +42,15 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    **Voice experience correction:** GPT-Live/Marin remains the primary voice.
    Companion copy now clearly distinguishes optional Samantha local diagnostics,
    collapsed by default; no silent fallback or newly started paid session.
+   **Live playroom lifecycle:** structured verified game-turn receipts now guide
+   expressive Marin replies. Both transports mute input on completion, ignore late
+   game turns, wait for observed speech plus fresh playback-drain evidence and
+   finalize the session; missing evidence has a bounded 30-second fallback. Explicit
+   stop closes immediately, and game end disarms wake. Native hardware capture is
+   released at close, not by mute alone. Tests exercise both transports and failure
+   paths; 265 repository tests pass. The paid rehearsal script now requires automatic close and native capture
+   release. No new API spend, paid session, physical audio test or allowance increase
+   in this pass. Live sound quality and child readiness remain unverified.
 4. **Adaptable workflows** — implemented durable ordered plans, named inputs,
    background guarded step execution, tool/human completion evidence, resumable
    questions, cancellation and restart recovery. Plans auto-save; parameterized

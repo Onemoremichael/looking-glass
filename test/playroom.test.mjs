@@ -4,7 +4,7 @@ import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runInNewContext} from 'node:vm';
-import {newGame,advanceGame,gameIntent} from '../playroom.mjs';
+import {newGame,advanceGame,gameIntent,gameReceipt} from '../playroom.mjs';
 import {Session} from '../session.mjs';
 import {Assistant} from '../assistant.mjs';
 import {Voice} from '../voice.mjs';
@@ -28,6 +28,20 @@ test('bear branches on actual choices, resolves ordinal, preserves state for amb
   advanceGame(g,'a kite');advanceGame(g,'squeak');
   assert.equal(g.phase,'complete');assert.match(g.prompt,/ocean.*kite.*squeak/);
   advanceGame(g,'stop');assert.match(g.prompt,/Thanks for playing/);
+});
+test('game voice receipts expose only verified state and retain their original turn',async()=>{
+  const s=new Session();s.startPlayroom('bear');
+  const a=new Assistant({session:s,planner:{decide:()=>{throw Error('No cloud planning');}}});
+  const first=await a.execute('first','the second one');
+  assert.deepEqual(first.game,gameReceipt(s.state.playroom));
+  assert.deepEqual(first.game.choices,['ocean']);assert.equal(first.game.phase,'playing');
+  await a.execute('other','private words about my family');
+  assert.equal(s.state.playroom.feedback,'uncertain');
+  assert.doesNotMatch(JSON.stringify(gameReceipt(s.state.playroom)),/private words|family/);
+  await a.execute('next','a kite');await a.execute('last','squeak');
+  assert.equal(first.game.completed,1);assert.equal(first.game.turn,1);
+  assert.deepEqual(first.game.choices,['ocean']);
+  assert.deepEqual((await a.execute('last','squeak')).game.choices,['ocean','kite','squeak']);
 });
 test('playroom transitions clear old messages and roll back failed persistence',()=>{
   const s=new Session();s.state.message='Old confirmation';s.startPlayroom('animals');

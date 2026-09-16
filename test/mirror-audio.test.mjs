@@ -25,6 +25,17 @@ test('oversized USB frame disconnects before allocation',async t=>{
   const socket=net.connect(bridge.server.address().port,'127.0.0.1');socket.on('error',()=>{});await once(socket,'connect');
   const gone=once(bridge,'disconnect'),header=Buffer.alloc(5);header.writeUInt32BE(999999,1);socket.write(header);await gone;socket.destroy();assert.equal(bridge.active,false);
 });
+test('native drain target counts 20ms blocks including cues, and fresh stats are timestamped',async t=>{
+  const bridge=new MirrorAudio();await bridge.listen(0);t.after(()=>bridge.close());
+  const socket=net.connect(bridge.server.address().port,'127.0.0.1');socket.on('error',()=>{});socket.on('data',()=>{});await once(socket,'connect');t.after(()=>socket.destroy());
+  socket.write(frame(1,JSON.stringify({version:1,rate:16000,wake:true})));await wait();
+  assert.equal(bridge.output(Buffer.alloc(640).toString('base64')),undefined);
+  bridge.start();assert.equal(bridge.chime(Buffer.alloc(9600).toString('base64')),15);
+  assert.equal(bridge.output(Buffer.alloc(1282).toString('base64')),18);
+  const before=Date.now();socket.write(frame(3,JSON.stringify({capturing:true,playing:false,outputFrames:18})));await wait();
+  assert.equal(bridge.status().outputFrames,18);assert.ok(bridge.status().receivedAt>=before);
+  bridge.start();assert.equal(bridge.output(Buffer.alloc(640).toString('base64')),1);assert.equal(bridge.status().receivedAt,undefined);
+});
 test('standby has a separate local-only route; old PCM cannot cross into conversation before fresh-capture acknowledgment',async t=>{
   const bridge=new MirrorAudio();await bridge.listen(0);t.after(()=>bridge.close());
   const socket=net.connect(bridge.server.address().port,'127.0.0.1');socket.on('error',()=>{});socket.on('data',()=>{});await once(socket,'connect');t.after(()=>socket.destroy());

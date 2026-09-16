@@ -23,7 +23,7 @@ export class MirrorAudio extends EventEmitter {
           if(type===1&&!s.hello){const hello=JSON.parse(data);if(hello.version!==1||hello.rate!==16000)throw Error();s.hello=true;s.wakeCapable=hello.wake===true;this.stats={};}
           else if(!s.hello)throw Error();
           else if(type===2){if(data.length!==640)throw Error();if(this.active)this.emit('audio',data);else if(this.mode==='standby')this.emit('standby-audio',data);}
-          else if(type===3){const m=JSON.parse(data);this.stats={capturing:!!m.capturing,playing:!!m.playing,rms:Number(m.rms)||0,peak:Number(m.peak)||0,inputFrames:Number(m.inputFrames)||0,outputFrames:Number(m.outputFrames)||0};if(m.error)this.emit('fault');}
+          else if(type===3){const m=JSON.parse(data);this.stats={receivedAt:Date.now(),capturing:!!m.capturing,playing:!!m.playing,rms:Number(m.rms)||0,peak:Number(m.peak)||0,inputFrames:Number(m.inputFrames)||0,outputFrames:Number(m.outputFrames)||0};if(m.error)this.emit('fault');}
           else if(type===4)this.send(14); // local keepalive, not a paid-session lease
           else if(type===6&&this.mode==='conversation')this.active=true; // Fresh capture, never queued standby PCM.
         }catch{s.destroy();return;}
@@ -35,12 +35,14 @@ export class MirrorAudio extends EventEmitter {
     if(s.writableLength>128000){s.destroy();throw Error('Mirror audio is falling behind');}
     const header=Buffer.alloc(5);header[0]=type;header.writeUInt32BE(data.length,1);s.write(Buffer.concat([header,data]));
   }
-  start(){this.stats={};this.mode='conversation';this.active=!this.peer?.wakeCapable;this.send(10);}
+  start(){this.stats={};this.outputFramesSent=0;this.mode='conversation';this.active=!this.peer?.wakeCapable;this.send(10);}
   standby(){if(!this.peer?.wakeCapable)throw Error('Mirror needs wake-capable APK');this.active=false;this.mode='standby';this.send(15,Buffer.from([0]));}
   connecting(){this.active=false;this.mode='connecting';this.send(15,Buffer.from([1]));}
   stop(){this.active=false;this.mode='off';try{this.send(11);}catch{}}
   mute(value){this.send(12,Buffer.from([value?1:0]));}
-  chime(pcm){if(this.mode==='conversation')this.send(16,Buffer.from(pcm,'base64'));}
-  output(base64){if(this.mode==='conversation')this.send(13,Buffer.from(base64,'base64'));}
+  // Android splits each message into <=640-byte playback blocks and reports
+  // outputFrames per block, not per provider message. Count cue blocks as well.
+  chime(pcm){if(this.mode==='conversation'){const data=Buffer.from(pcm,'base64');this.send(16,data);return this.outputFramesSent+=Math.ceil(data.length/640);}}
+  output(base64){if(this.mode==='conversation'){const data=Buffer.from(base64,'base64');this.send(13,data);return this.outputFramesSent+=Math.ceil(data.length/640);}}
   close(){this.stop();this.peer?.destroy();this.server.close();}
 }

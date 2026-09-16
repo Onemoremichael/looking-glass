@@ -12,6 +12,15 @@ test('metadata allowlist excludes secrets, transcript content and arbitrary enum
   assert.deepEqual(safeAttributes({fallback_reason:'user utterance secret'}),{});
   assert.deepEqual(safeAttributes({fallback_reason:'unsupported_wording'}),{fallback_reason:'unsupported_wording'});
 });
+test('game wrap-up telemetry retains only bounded lifecycle metadata',async t=>{
+  const file=local(t),telemetry=new Telemetry({file});t.after(()=>telemetry.close());
+  const span=telemetry.start('voice.session');
+  span.event('game.wrapup',{wrap_state:'drained',answer:'private answer',choices:['private'],prompt:'private prompt'});
+  span.end({outcome:'ok',reason:'game_complete'});
+  const event=telemetry.records.find(r=>r.event==='game.wrapup');assert.deepEqual(event.attributes,{wrap_state:'drained'});
+  assert.equal(telemetry.records.at(-1).attributes.reason,'game_complete');
+  assert.deepEqual(safeAttributes({wrap_state:'private text'}),{});assert.doesNotMatch(readFileSync(file,'utf8'),/private/);
+});
 test('OTLP stays disabled until explicit opt-in; bad external endpoints rejected',()=>{
   assert.equal(exportConfig({OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:'https://example.com'}),null);
   assert.throws(()=>exportConfig({OTEL_EXPORT_ENABLED:'1'}));

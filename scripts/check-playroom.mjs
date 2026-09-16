@@ -24,12 +24,24 @@ try{
     for(let n=0;n<60;n++){game=(await get('/api/state')).playroom;if(game?.index===i+1)break;await pause(200);}
     assert.equal(game?.index,i+1,'Spoken answer did not advance the expected game step');
     console.log(JSON.stringify({kind,step:i+1,elapsedMs:Date.now()-start,feedback:game.feedback,phase:game.phase}));
+    if(game.phase==='complete')break;
     // Let reply playback finish; a watchdog bounds the wait, never loops forever.
     await pause(900);
     for(let n=0;n<40;n++){if((await get('/api/voice')).phase==='listening')break;await pause(200);}
     await pause(500);
   }
   assert.equal((await get('/api/state')).playroom.phase,'complete');
+  // A completed board alone isn't proof of a completed voice interaction.
+  // Wait for the farewell and automatic release, before finally cleanup can
+  // hide a lifecycle regression. The server's drain fallback is not a pass.
+  let voice;
+  for(let n=0;n<160;n++){voice=await get('/api/voice');if(['off','error'].includes(voice.phase))break;await pause(250);}
+  assert.equal(voice.phase,'off','GPT-Live did not automatically finalize');
+  assert.equal(voice.stopReason,'game_complete','Final audio was not confirmed drained before timeout');
+  let audio;
+  for(let n=0;n<16;n++){audio=await get('/api/mirror-audio');if(audio.connected&&audio.active===false&&audio.capturing===false)break;await pause(250);}
+  assert.equal(audio.connected,true);assert.equal(audio.active,false);assert.equal(audio.capturing,false,'Native recorder did not confirm release');
+  console.log(JSON.stringify({kind,automaticClose:true,stopReason:voice.stopReason,captureStopped:true}));
 }finally{
   clearInterval(heartbeat);
   if(ownsRehearsal){
