@@ -59,6 +59,7 @@ if(state.panel==='home')html='<div class="grid"><article><span class="tag">WORKI
   window.GlassSurface.subscribe({
     voice:function(value){window.GlassPlayroom.voice(value);window.dispatchEvent(new CustomEvent('glass-voice',{detail:value}));},
     wake:function(value){window.dispatchEvent(new CustomEvent('glass-wake',{detail:value}));},
+    playroomAudio:function(value){window.GlassPlayroom.voice(value);window.dispatchEvent(new CustomEvent('glass-playroom-audio',{detail:value}));},
     state:function(value){state=value;render();document.getElementById('connection').textContent='Local display connected · camera off';},
     error:function(){document.getElementById('connection').textContent='Disconnected. Reconnecting; displayed state may be stale.';}
   });

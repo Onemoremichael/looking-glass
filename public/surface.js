@@ -19,6 +19,7 @@
         source.onmessage=function(e){if(events===source)handlers.state(JSON.parse(e.data));};
         source.addEventListener('voice',function(e){if(events===source)handlers.voice(JSON.parse(e.data));});
         source.addEventListener('wake',function(e){if(events===source&&handlers.wake)handlers.wake(JSON.parse(e.data));});
+        source.addEventListener('playroom-audio',function(e){if(events===source&&handlers.playroomAudio)handlers.playroomAudio(JSON.parse(e.data));});
         source.onerror=function(){if(events===source)handlers.error();};
       }
       document.addEventListener('visibilitychange',sync);

@@ -35,7 +35,7 @@ export class MirrorAudio extends EventEmitter {
     if(s.writableLength>128000){s.destroy();throw Error('Mirror audio is falling behind');}
     const header=Buffer.alloc(5);header[0]=type;header.writeUInt32BE(data.length,1);s.write(Buffer.concat([header,data]));
   }
-  start(){this.mode='conversation';this.active=!this.peer?.wakeCapable;this.send(10);}
+  start(){this.stats={};this.mode='conversation';this.active=!this.peer?.wakeCapable;this.send(10);}
   standby(){if(!this.peer?.wakeCapable)throw Error('Mirror needs wake-capable APK');this.active=false;this.mode='standby';this.send(15,Buffer.from([0]));}
   connecting(){this.active=false;this.mode='connecting';this.send(15,Buffer.from([1]));}
   stop(){this.active=false;this.mode='off';try{this.send(11);}catch{}}

@@ -44,6 +44,7 @@
     indicator.className='mirror-voice'+(state.phase==='off'||nativeRoutine?' off':''); indicator.setAttribute('data-phase',state.phase);
     document.getElementById('mirror-voice-label').textContent=state.phase==='needs_input'?state.detail:({listening:'Listening',thinking:'Working on your request',speaking:'Speaking',muted:'Mic muted',connecting:'Connecting',stopping:'Finishing',error:'Voice unavailable'}[state.phase]||'');
   },
+  playroomAudio:function(state){if(window.GlassPlayroom)window.GlassPlayroom.voice(state);},
   state:function(state){render(state);var status=document.getElementById('connection');status.textContent='';status.hidden=true;},
   error:function(){var status=document.getElementById('connection');status.textContent='Connection lost · displayed information may be stale';status.hidden=false;}
   });
