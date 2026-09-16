@@ -47,6 +47,7 @@ export class ImageStudio {
     if(this.session.state.revision!==revision)throw Error('Display changed while deciding');
     const existing=jobs.find(j=>j.key===key&&(j.status==='completed'||pending.includes(j.status)));
     if(existing){this.session.command('open_image',{jobId:existing.id});return this.result(existing);}
+    if(jobs.some(j=>j.accounting==='unconfirmed'))throw Error('Image usage accounting needs reconciliation before another generation');
     if(this.active)throw Error('An image is already being generated. Wait or cancel it first.');
     if(jobs.length>=32)throw Error('Image library is full (32 jobs). No paid request was started.');
     const job={id:randomUUID(),requestId,key,spec,model:IMAGE_MODEL,status:'queued',createdAt:Date.now(),detail:'Preparing one image. It may take a few minutes.'};
@@ -59,31 +60,42 @@ export class ImageStudio {
   result(job){return {status:'completed',action:'assistant',jobId:job.id,message:job.status==='completed'?'Saved artwork is ready. Reopened without generation.':pending.includes(job.status)?'Image job accepted, not finished. It can take a few minutes. Progress is on the display; the result and prompt will save automatically. You can keep using other functions.':'Image job '+job.status+'. '+job.detail};}
   update(id,values){this.edit(s=>{const job=s.imageJobs.find(j=>j.id===id);if(!job)throw Error('Missing image job');Object.assign(job,values);});}
   async run(job,signal){
-    let reservation,usage,settled=false;
-    const span=this.telemetry?.start('image.generate',{});
+    let reservation,usage,settled=false,span,received=false,accountingFailed=false;
+    // Observability cannot prevent execution or turn a completed image into a
+    // failure. The real Telemetry integration is covered by tests as well.
+    try{span=this.telemetry?.start('image.generate',{});}catch{}
+    const end=outcome=>{try{span?.end({outcome});}catch{}};
+    const settle=()=>{
+      if(!reservation||settled)return;
+      settled=true; // Never retry a failed ledger mutation implicitly.
+      try{this.budget.finishImage(reservation,{received,usage});}
+      catch{accountingFailed=true;}
+    };
     try{
-      if(signal.aborted){span?.end({outcome:'cancelled'});return;}
+      if(signal.aborted){end('cancelled');return;}
       this.client ||= new OpenAI({maxRetries:0,timeout:this.timeoutMs});
       reservation=this.budget.reserve('image-generation');
       this.update(job.id,{status:'generating',detail:'Creating your artwork. You can leave this view; it will be saved here.'});
       const result=await this.client.images.generate({model:IMAGE_MODEL,prompt:job.spec.prompt,n:1,size:'1024x1024',quality:'medium',background:job.spec.background,output_format:'png',moderation:'auto'},
         {signal:AbortSignal.any([signal,AbortSignal.timeout(this.timeoutMs)]),maxRetries:0});
-      usage=result.usage;
-      this.budget.finishImage(reservation,{received:true,usage});settled=true;
-      if(signal.aborted){span?.end({outcome:'cancelled'});return;}
+      usage=result.usage;received=true;
+      settle();
+      if(accountingFailed)throw Error('Image accounting could not be saved');
+      if(signal.aborted){end('cancelled');return;}
       const encoded=result.data?.length===1&&result.data[0].b64_json;
       if(typeof encoded!=='string'||encoded.length>16*1024*1024||!encoded.length||!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))throw Error('Invalid image response');
       const bytes=Buffer.from(encoded,'base64'),dimensions=validatePng(bytes);
       mkdirSync(this.directory,{recursive:true});
       const target=join(this.directory,job.id+'.png');writeFileSync(target+'.tmp',bytes,{mode:0o600});renameSync(target+'.tmp',target);
       this.update(job.id,{status:'completed',detail:'Saved to your artwork library.',completedAt:Date.now(),...dimensions});
-      span?.end({outcome:'completed'});
+      end('completed');
     }catch(error){
-      if(reservation&&!settled){this.budget.finishImage(reservation,{received:false,usage});settled=true;}
-      if(!signal.aborted)this.update(job.id,{status:'failed',detail:error.code==='test_budget_exhausted'?'The approved test allowance is exhausted. No image was requested.':'Image generation did not complete. Check account access, network and allowance before explicitly trying again. No automatic retry.'});
-      span?.end({outcome:signal.aborted?'cancelled':'error'});
-    }finally{
-      if(reservation&&!settled)this.budget.finishImage(reservation,{received:false,usage});
+      settle();
+      if(accountingFailed)this.update(job.id,{accounting:'unconfirmed',accountingReservation:reservation,
+        accountingUsage:Object.fromEntries(['input_tokens','output_tokens'].filter(k=>Number.isFinite(usage?.[k])&&usage[k]>=0).map(k=>[k,usage[k]])),
+        detail:'Usage accounting could not be saved. Provider charges may have occurred. Image generation is paused until the ledger is reconciled.',...(!signal.aborted?{status:'failed'}:{})});
+      else if(!signal.aborted)this.update(job.id,{status:'failed',detail:error.code==='test_budget_exhausted'?'The approved test allowance is exhausted. No image was requested.':'Image generation did not complete. Check account access, network and allowance before explicitly trying again. No automatic retry.'});
+      end(signal.aborted?'cancelled':'error');
     }
   }
   cancel(id){
@@ -102,7 +114,7 @@ export class ImageStudio {
     this.closed=true;
     if(this.active){
       const active=this.active;active.controller.abort();
-      try{this.update(active.id,{status:'interrupted',detail:'Server stopped waiting. Provider completion and charges may be unknown; no automatic retry.'});}
+      try{if(pending.includes(this.session.state.imageJobs.find(j=>j.id===active.id)?.status))this.update(active.id,{status:'interrupted',detail:'Server stopped waiting. Provider completion and charges may be unknown; no automatic retry.'});}
       finally{await active.promise;}
     }
   }

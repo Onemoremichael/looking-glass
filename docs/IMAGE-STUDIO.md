@@ -56,15 +56,35 @@ The local ledger is **not a provider-side hard spending cap or billing invoice**
 It shares the owner's existing $25 testing allowance; this pass did not raise or
 reset that limit. New work fails closed when allowance is unavailable.
 
+If settlement cannot be written to the usage ledger, the job records
+`accounting: "unconfirmed"`, the internal reservation ID and any numeric usage
+evidence; new image generation is blocked, including after
+restart. There is no automatic ledger retry or refund. Reconcile the original
+reservation against provider usage and local records before clearing that flag;
+do not reset the budget file. Previously completed artwork can still reopen.
+
+The real telemetry layer registers `image.generate` and exposes duration/outcome
+metrics without prompts, artwork, or provider payloads. An observer failure cannot
+stop generation or discard an otherwise completed image. Shutdown only marks
+unfinished jobs interrupted; completed results retain their status.
+
 The playroom does not expose image creation. Exit active generation before entering
 adult rehearsal; child deployment still has separate privacy release gates.
 
 ## Verification
 
-172 offline tests pass, including eight image-specific tests covering completion,
+175 offline tests pass, including eleven image-specific tests covering completion,
 saved reuse, cancellation/late results, interruption recovery, spending accounting,
 failed storage rollback, payload/path validation, origin controls, local routing
-and noninteractive escaped rendering. No paid API call is made by the tests.
+and noninteractive escaped rendering. All image fixtures now use real local
+OpenTelemetry, including the HTTP acceptance-to-PNG integration test. Additional
+fault injection covers trace start/end failure, ledger settlement failure,
+restart with unresolved accounting, and shutdown during completed-job publication.
+No paid API call is made by the tests.
+
+This closes a production integration defect discovered after the first pass:
+`image.generate` had not been registered, so tracing threw before error handling
+and could leave a job queued. Prior mock-only checks did not cover that boundary.
 
 Native browser checks exercised the companion form, visible failed-job state and
 library reopening. The completed-art layout was inspected on the Android 6 mirror

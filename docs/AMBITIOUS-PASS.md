@@ -18,6 +18,11 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    tests and Android portrait fixture rendering pass. Actual provider access,
    image editing and spoken end-to-end acceptance remain pending. See
    [image studio](IMAGE-STUDIO.md). Existing game artwork is generated separately.
+   **Reliability follow-up:** fixed an unregistered trace that could strand real
+   jobs at queued; real-telemetry HTTP tests now verify acceptance through saved
+   PNG delivery. Observer failures no longer break jobs. Unsettled usage blocks
+   further image spend across restart, and shutdown preserves completed work.
+   175 offline tests pass; no new paid calls or provider-access claims.
 3. **Playroom** — adult-rehearsal foundation implemented: four generated animal
    assets, conservative answer judgment with uncertainty, retry/hint/skip state,
    bounded bear choices and audio-reactive animation. Hardware animal display was
