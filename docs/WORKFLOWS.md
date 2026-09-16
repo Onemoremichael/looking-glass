@@ -101,8 +101,8 @@ Deterministic tests exercise tool-evidenced completion, parameter reuse, input
 validation, multi-turn questions, scope guards, restart/receipt recovery, late
 planning and image cancellation, retained research, numbered choices, unavailable
 weather, storage rollback, custom-capability blocking, idempotent routing, escaped
-rendering and HTTP authorization. The full suite has 193 passing tests, including
-18 workflow tests. Real local `workflow.run` spans group delegated step traces;
+rendering and HTTP authorization. The full suite has 200 passing tests, including
+18 workflow tests and seven provider-contract tests. Real local `workflow.run` spans group delegated step traces;
 only typed counts, duration and outcomes enter telemetry, not plan text, inputs
 or research snapshots.
 
@@ -115,10 +115,24 @@ because the provider's declared status did not agree with its action list
 provider session was completed and cleaned up. The raw response was not retained,
 so the precise conflicting status/action combination is unknown.
 
-**Known blocker for live plan creation:** the provider schema permits combinations
-that the application correctly rejects. Encode the status/action relationship in
-the structured output contract, add provider-boundary regression tests, then rerun
-the smoke test before calling live workflows ready. Natural spoken plan creation
+**Implemented follow-up:** the provider schema now encodes the status/action
+relationship in an object envelope with exclusive decision branches. Execute
+requires 1–5 actions and no options; the other statuses cannot contain actions.
+Only clarification can contain options, and non-execution decisions cannot nominate
+a quick action. The same provider envelope is validated locally before extracting
+the flat decision used by existing application code and persisted receipts.
+Creating a plan with missing inputs is execution of plan creation; the workflow
+then owns those questions. Ordinary clarification remains mutation-free.
+
+Seven new provider-boundary regressions cover contradictory responses, envelope
+shape and cardinality, unchanged state and cleanup after rejection, ordinary
+questions, incomplete streams, and plan creation with a saved input question.
+Failure diagnostics expose only typed status/count metadata, not raw model text.
+There is no automatic normalization of invalid output or paid repair/retry.
+See [planner contract](PLANNER-CONTRACT.md) for the schema and migration boundary.
+
+**Still unverified:** rerun the paid smoke test before calling live workflows ready.
+Natural spoken plan creation
 and longer mixed-provider runs remain unverified. The existing $25 test allowance
 is conservatively accounted at approximately $24.97; another paid planning
 reservation requires additional budget approval. No automatic paid retry is made.
@@ -126,7 +140,7 @@ reservation requires additional budget approval. No automatic paid retry is made
 ```sh
 node scripts/preview-workflows.mjs
 # Isolated in-memory fixture, http://localhost:8784/; no API calls.
-# After fixing the provider contract and obtaining sufficient approved allowance:
+# After obtaining sufficient approved allowance (live retest still pending):
 node scripts/check-workflow-plan.mjs --paid
 ```
 

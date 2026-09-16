@@ -36,8 +36,9 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    fresh runs and separate adapted recipes preserve prior work. Local plan routes
    bypass plan creation, but general compiled step fast paths remain follow-up.
    Browser controls and physical portrait layout verified offline. One live plan
-   creation test failed closed on a provider status/action mismatch; structured
-   contract hardening and a paid retest remain required. Spoken mixed-provider
+   creation test failed closed on a provider status/action mismatch. The structured
+   contract now encodes exclusive action/question branches, with boundary tests;
+   a paid retest remains required. Spoken mixed-provider
    runs remain unverified. See [workflows](WORKFLOWS.md).
    **Still pending:** sandboxed custom UX/code creation with validation and
    promotion, not arbitrary host execution. Missing-capability steps stop honestly.

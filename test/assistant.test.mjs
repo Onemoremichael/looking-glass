@@ -4,7 +4,7 @@ import { Session } from '../session.mjs';
 import { Assistant } from '../assistant.mjs';
 import { SurfaceRegistry, validateDecision, presentation } from '../assistant-contract.mjs';
 import { AgentsPlanner } from '../agents-planner.mjs';
-const decision=(actions=[],extra={})=>({status:actions.length?'execute':'clarify',outcome:'Manage my day',message:'Which one?',actions,options:[],selectedOptionId:null,...extra});
+const decision=(actions=[],extra={})=>({status:actions.length?'execute':'clarify',outcome:'Manage my day',message:'Which one?',actions,options:[],selectedOptionId:null,quickAction:null,...extra});
 const setup=(decide)=>{
   const session=new Session(),surfaces=new SurfaceRegistry();
   return {session,surfaces,assistant:new Assistant({session,surfaces,planner:{decide}})};
@@ -97,13 +97,13 @@ test('presentation includes result cards and each surface’s actual saved/reque
 });
 test('Agents API adapter requires completed JSON, cleans its session and accounts for use',async()=>{
   const calls=[],d=decision([{action:'show',panel:'todos'}]);
-  const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){yield {type:'agent.session.created',session:{id:'test'}};yield {type:'agent.session.turn.output_text.done',text:JSON.stringify(d)};yield {type:'agent.session.turn.completed',usage:{input_tokens:10,output_tokens:20}};}};
+  const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){yield {type:'agent.session.created',session:{id:'test'}};yield {type:'agent.session.turn.output_text.done',text:JSON.stringify({decision:d})};yield {type:'agent.session.turn.completed',usage:{input_tokens:10,output_tokens:20}};}};
   const planner=new AgentsPlanner({client:{beta:{agents:{sessions:{create:async body=>{assert.equal(body.environment.type,'none');assert.deepEqual(body.agent.tools,[{type:'web_search',mode:'live',context_size:'medium'}]);return stream;},delete:async id=>calls.push(id)}}}},budget:{reserve:()=> 'b',finishAgent:(id,result)=>calls.push(result)}});
   assert.deepEqual(await planner.decide({utterance:'Show my list'}),d);await planner.drain();assert.equal(calls[0],'test');assert.equal(calls[1].complete,true);
 });
 test('Agents stream failure cancels, deletes and never accepts an incomplete decision',async()=>{
   const calls=[];
-  const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){yield {type:'agent.session.created',session:{id:'test'}};yield {type:'agent.session.turn.output_text.done',text:JSON.stringify(decision())};}};
+  const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){yield {type:'agent.session.created',session:{id:'test'}};yield {type:'agent.session.turn.output_text.done',text:JSON.stringify({decision:decision()})};}};
   const planner=new AgentsPlanner({client:{beta:{agents:{sessions:{create:async()=>stream,events:{create:async()=>calls.push('cancel')},delete:async()=>calls.push('delete')}}}},budget:{reserve:()=> 'b',finishAgent:()=>{}}});
   await assert.rejects(()=>planner.decide({}));assert.deepEqual(calls,['cancel','delete']);
 });
@@ -119,7 +119,7 @@ test('replacement planning waits for previous cleanup; aborted queued requests n
 test('validated result arrives before cleanup; next call and drain still wait for cleanup',async()=>{
   const calls=[];let release;const deletion=new Promise(r=>release=r);
   const d=decision([{action:'show',panel:'todos'}]);
-  const stream=()=>({controller:{abort(){}},async *[Symbol.asyncIterator](){yield {type:'agent.session.created',session:{id:'test'}};yield {type:'agent.session.turn.output_text.done',text:JSON.stringify(d)};yield {type:'agent.session.turn.completed'};}});
+  const stream=()=>({controller:{abort(){}},async *[Symbol.asyncIterator](){yield {type:'agent.session.created',session:{id:'test'}};yield {type:'agent.session.turn.output_text.done',text:JSON.stringify({decision:d})};yield {type:'agent.session.turn.completed'};}});
   const planner=new AgentsPlanner({client:{beta:{agents:{sessions:{create:async body=>{assert.equal(body.agent.reasoning.effort,'low');calls.push('create');return stream();},delete:async()=>{calls.push('delete');await deletion;}}}}},budget:{reserve:()=>{calls.push('reserve');return 'b';},finishAgent:()=>calls.push('finish')}});
   assert.deepEqual(await planner.decide({}),d);
   assert.deepEqual(calls,['reserve','create','delete']);
@@ -134,7 +134,7 @@ test('validated result arrives before cleanup; next call and drain still wait fo
 });
 test('unconfirmed background cleanup retains accounting and does not silently retry inference',async()=>{
   let creates=0,deletes=0,blocked=false;const finished=[];
-  const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){yield {type:'agent.session.created',session:{id:'test'}};yield {type:'agent.session.turn.output_text.done',text:JSON.stringify(decision())};yield {type:'agent.session.turn.completed'};}};
+  const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){yield {type:'agent.session.created',session:{id:'test'}};yield {type:'agent.session.turn.output_text.done',text:JSON.stringify({decision:decision()})};yield {type:'agent.session.turn.completed'};}};
   const planner=new AgentsPlanner({client:{beta:{agents:{sessions:{create:async()=>{creates++;return stream;},delete:async()=>{deletes++;throw Error('offline');}}}}},budget:{reserve:()=>{if(blocked)throw Error('Unconfirmed cleanup');return 'b';},finishAgent:(_id,result)=>{finished.push(result);blocked=!result.cleaned;}}});
   await planner.decide({});await planner.drain();
   assert.equal(finished[0].cleaned,false);assert.equal(finished[0].complete,true);

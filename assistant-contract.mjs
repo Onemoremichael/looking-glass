@@ -46,6 +46,30 @@ export const decisionSchema = obj({
 });
 // Provider output always includes a nomination; older local decisions remain valid.
 export const plannerDecisionSchema={...decisionSchema,properties:{...decisionSchema.properties,quickAction:quickActionSchema},required:[...decisionSchema.required,'quickAction']};
+// Keep the root an object, with mutually exclusive decision shapes inside it.
+// Encode cross-field rules at generation time, not only after a paid turn ends.
+// Local decisions and persisted receipts retain their existing flat shape.
+export const plannerResponseSchema=obj({decision:{anyOf:
+  ['execute','clarify','unsupported','answer'].map(status=>obj({
+    ...plannerDecisionSchema.properties,
+    status:{enum:[status]},
+    actions:status==='execute'?{...decisionSchema.properties.actions,minItems:1}:{type:'array',items:{type:'null'},maxItems:0},
+    options:status==='clarify'?decisionSchema.properties.options:{type:'array',items:{type:'null'},maxItems:0},
+    quickAction:status==='execute'?quickActionSchema:{type:'null'},
+  })),
+}});
+export function validatePlannerResponse(response){
+  try{
+    if(!matches(plannerResponseSchema,response))throw Error('Invalid planner response contract');
+    return validateDecision(response.decision);
+  }catch{
+    // Typed shape metadata only: never log generated text, inputs or identifiers.
+    const d=response?.decision,error=Error('Invalid planner response contract');
+    error.code='planner_contract_invalid';
+    error.contract={envelope:!!d&&typeof d==='object'&&!Array.isArray(d),status:['execute','clarify','unsupported','answer'].includes(d?.status)?d.status:'unknown',actionCount:Array.isArray(d?.actions)?d.actions.length:null,optionCount:Array.isArray(d?.options)?d.options.length:null};
+    throw error;
+  }
+}
 // Validate this small schema subset locally as well as at the model boundary.
 export function matches(schema,value) {
   if(schema.anyOf)return schema.anyOf.some(s=>matches(s,value));
@@ -54,7 +78,7 @@ export function matches(schema,value) {
   if(schema.type==='boolean')return typeof value==='boolean';
   if(schema.type==='integer')return Number.isInteger(value)&&value>=schema.minimum&&value<=schema.maximum;
   if(schema.type==='string')return typeof value==='string'&&value.trim().length>=schema.minLength&&value.length<=schema.maxLength;
-  if(schema.type==='array')return Array.isArray(value)&&value.length<=schema.maxItems&&value.every(v=>matches(schema.items,v));
+  if(schema.type==='array')return Array.isArray(value)&&value.length>=(schema.minItems??0)&&value.length<=(schema.maxItems??Infinity)&&value.every(v=>matches(schema.items,v));
   if(schema.type==='object')return value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).every(k=>Object.hasOwn(schema.properties,k))&&schema.required.every(k=>Object.hasOwn(value,k)&&matches(schema.properties[k],value[k]));
   return !!schema.enum;
 }
