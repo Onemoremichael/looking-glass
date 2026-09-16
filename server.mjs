@@ -15,6 +15,7 @@ import {Wake} from './wake.mjs';
 import {ImageStudio} from './image-studio.mjs';
 import {Workflows} from './workflows.mjs';
 import {CustomFunctions} from './custom-functions.mjs';
+import {LocalPlayroom} from './local-playroom.mjs';
 
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
 const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png' };
@@ -29,7 +30,7 @@ for(const kind of ['cloud','sun','moon','rain','storm','snow','fog']){
   files['/assets/weather/'+kind+'-volume-v1.png']='assets/weather/'+kind+'-volume-v1.png';
 }
 
-export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}, telemetry, assistantOptions,weatherOptions={}, mirrorAudio=null,wakeOptions={},studioOptions={} } = {}) {
+export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}, telemetry, assistantOptions,weatherOptions={}, mirrorAudio=null,wakeOptions={},studioOptions={},localPlayroomOptions={} } = {}) {
   const clients = new Set();
   const surfaces=new SurfaceRegistry();
   const session = new Session({ ...sessionOptions, onChange: state => {
@@ -48,6 +49,9 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
     telemetry?.start('wake.state',{wake_phase:state.phase,wake_reason:state.reason}).end({outcome:'ok'});
     for(const client of clients)client.write(`event: wake\ndata: ${JSON.stringify(state)}\n\n`);
   }});
+  const localPlayroom=new LocalPlayroom({session,mirror:mirrorAudio,...localPlayroomOptions,publish:state=>{
+    for(const client of clients)client.write(`event: playroom-audio\ndata: ${JSON.stringify(state)}\n\n`);
+  }});
   const server = http.createServer(async (req, res) => {
     const json = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
     res.setHeader('Cache-Control', 'no-store');
@@ -64,6 +68,17 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
         if(path==='/api/telemetry')return json(200,telemetry?.snapshot()||{records:[],metrics:{},exportEnabled:false,captureTranscripts:false});
       }
       if (req.method === 'GET' && path === '/api/state') return json(200, session.state);
+      if(req.method==='GET'&&path==='/api/playroom-audio')return json(200,localPlayroom.state);
+      if(req.method==='POST'&&path==='/api/playroom-audio'){
+        if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress)||req.headers.origin!==localOrigin||!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(403,{error:'Local same-origin JSON required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>512)return json(413,{error:'Request too large'});}
+        try{const b=JSON.parse(raw);
+          if(b.action==='stop')localPlayroom.stop();
+          else if(b.action==='start'&&b.adultRehearsal===true){if(voice.active||wake.state.enabled)throw Error('Stop cloud voice and wake listening first');await localPlayroom.start();}
+          else throw Error('Adult rehearsal and explicit local start required');
+          return json(200,localPlayroom.state);
+        }catch(e){return json(409,{error:e.message});}
+      }
       if(req.method==='POST'&&path==='/api/functions'){
         if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress)||req.headers.origin!==localOrigin||!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(403,{error:'Local same-origin JSON required'});
         let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>128000)return json(413,{error:'Request too large'});}
@@ -111,6 +126,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
         res.write(`data: ${JSON.stringify(session.state)}\n\n`);
         res.write(`event: voice\ndata: ${JSON.stringify(voice.state)}\n\n`);
         res.write(`event: wake\ndata: ${JSON.stringify(wake.state)}\n\n`);
+        res.write(`event: playroom-audio\ndata: ${JSON.stringify(localPlayroom.state)}\n\n`);
         clients.add(res);
         const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
         req.on('close', () => { clearInterval(heartbeat); clients.delete(res); });
@@ -126,7 +142,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
         if (!body || typeof body!=='object') return json(400,{error:'Invalid body'});
         if(path.startsWith('/api/wake/')){
           try{
-            if(path==='/api/wake/enable'){if(body.test!==undefined&&typeof body.test!=='boolean')throw Error('Invalid test mode');await wake.enable({test:body.test===true});}
+            if(path==='/api/wake/enable'){if(localPlayroom.active)throw Error('Stop local game audio first');if(body.test!==undefined&&typeof body.test!=='boolean')throw Error('Invalid test mode');await wake.enable({test:body.test===true});}
             else if(path==='/api/wake/disable')await wake.disable();
             else if(path==='/api/wake/end'){if(voice.active?.owner!=='wake')throw Error('No wake conversation is active');await voice.stop(undefined,'user');}
             else return json(404,{error:'Unknown wake operation'});
@@ -134,7 +150,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
           }catch(e){return json(409,{error:e.message});}
         }
         if (path==='/api/voice/start') {
-          try { if(wake.state.enabled)throw Error('Turn off wake listening before starting a manual conversation');if(body.device==='mirror'&&!mirrorAudio)throw Error('Mirror audio is unavailable');return json(201,await voice.start(body.sdp,body.device==='mirror'?mirrorAudio:null)); }
+          try { if(localPlayroom.active)throw Error('Stop local game audio first');if(wake.state.enabled)throw Error('Turn off wake listening before starting a manual conversation');if(body.device==='mirror'&&!mirrorAudio)throw Error('Mirror audio is unavailable');return json(201,await voice.start(body.sdp,body.device==='mirror'?mirrorAudio:null)); }
           catch (e) { return json(409,{error:e.message}); }
         }
         if (!voice.active || body.token!==voice.active.token) return json(409,{error:'No matching active session'});
@@ -160,9 +176,10 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
         let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>512)return json(413,{error:'Request too large'});}
         try{
           const body=JSON.parse(raw);
-          if(body.action==='stop'){await wake.disable();await voice.stop();session.endPlayroom();}
+          if(body.action==='stop'){localPlayroom.stop();await wake.disable();await voice.stop();session.endPlayroom();}
           else if(body.action==='start'&&body.adultRehearsal===true){
             if(voice.active||wake.state.enabled)throw Error('End voice and wake listening before entering rehearsal');
+            if(localPlayroom.active)throw Error('Stop local game audio before changing games');
             if(studio.active)throw Error('Finish or cancel image generation before entering rehearsal');
             if(workflows.active)throw Error('Pause the workflow before entering rehearsal');
             if(functions.active)throw Error('Wait for the function check before entering rehearsal');
@@ -181,8 +198,8 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
       json(404, { error: 'Not found' });
     } catch { if (!res.headersSent) json(500, { error: 'Request failed' }); else res.end(); }
   });
-  return { server, session, voice, weather,wake,studio,workflows,functions, close: async () => {
-    try { await workflows.close();await functions.close();await studio.close();await wake.close();await weather.close();await voice.stop(undefined,'shutdown'); await assistant?.planner.drain?.(); }
+  return { server, session, voice, weather,wake,studio,workflows,functions,localPlayroom, close: async () => {
+    try { localPlayroom.close();await workflows.close();await functions.close();await studio.close();await wake.close();await weather.close();await voice.stop(undefined,'shutdown'); await assistant?.planner.drain?.(); }
     finally { mirrorAudio?.close();session.close(); for (const client of clients) client.end(); server.close(); await telemetry?.close(); }
   } };
 }

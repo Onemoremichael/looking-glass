@@ -84,7 +84,9 @@ connection still shows a stale-data warning.
   unverified; offline tests and physical-mirror fixture rendering pass. See
   [image workflow, budget accounting and limits](docs/IMAGE-STUDIO.md).
 - Adult-only playroom rehearsal: four illustrated animal cards and a bounded Pip
-  bear adventure, with local game state and isolated voice instructions. Physical
+  bear adventure, with local game state, isolated voice instructions and opt-in
+  Mac-local recognition/synthesis using the Mirror microphone and speakers. Run
+  `npm run wake:setup` then `npm run playroom:setup` to install local speech. Physical
   spoken gameplay is not yet verified; this is not ready for children. See
   [implementation, privacy gates and test evidence](docs/PLAYROOM.md).
 - GPT-Live-1 WebRTC adapter with Mac mic/speakers, Start/End/Mute, server-side tools,

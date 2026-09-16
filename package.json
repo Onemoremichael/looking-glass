@@ -8,7 +8,8 @@
     "test": "node --test",
     "traces": "node scripts/trace-report.mjs",
     "wake:setup": "sh scripts/setup-wake.sh",
-    "wake:check": "node scripts/check-wake.mjs"
+    "wake:check": "node scripts/check-wake.mjs",
+    "playroom:setup": "sh scripts/setup-playroom.sh"
   },
   "engines": {
     "node": ">=22"
