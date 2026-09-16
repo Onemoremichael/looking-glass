@@ -5,7 +5,8 @@ import { dirname } from 'node:path';
 import { validateDecision,matches } from './assistant-contract.mjs';
 import {validateResearchSpec,validateResearchBoard,researchBoardSchema,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {promoteQuickAction} from './quick-actions.mjs';
-import {emptyWeather,weatherSummary} from './weather.mjs';
+import {emptyWeather,weatherSummary,weatherView} from './weather.mjs';
+import {validateWorkflowSpec} from './workflows.mjs';
 import {validateWeatherSpec,composeWeather,compositionSummary,refreshComposition,viewOfferCurrent} from './weather-composition.mjs';
 import {ReusableViews,weatherViewIndex} from './reusable-views.mjs';
 
@@ -24,7 +25,7 @@ function text(value, max = 300) {
 export class Session {
   constructor({ onChange = () => {}, file, now = Date.now, learnQuickActions=process.env.OPENAI_LEARNED_FAST_PATH!=='0' } = {}) {
     this.onChange = onChange; this.file = file; this.now = now; this.learnQuickActions=learnQuickActions;
-    this.repertoire=new ReusableViews({weather:validateWeatherSpec,research:validateResearchSpec});
+    this.repertoire=new ReusableViews({weather:validateWeatherSpec,research:validateResearchSpec,workflow:validateWorkflowSpec});
     this.state = { version: 1, revision: 0, panel: 'home', message: 'What would you like to do?', timers: [], todos: [], tasks: [], recipes: [], weatherViews:[],viewOffer:null,weather:emptyWeather(), catalog };
     if (file) {
       try {
@@ -119,8 +120,21 @@ export class Session {
       this.state.assistant=card;this.state.message=message;
       this.state.assistantHistory=this.state.playroom?[]:[...(this.state.assistantHistory||[]),{user:utterance,assistant:message,outcome:decision.outcome,status:decision.status}].slice(-8);
       const result={status:decision.status==='clarify'?'needs_input':'completed',action:'assistant',message:message+(decision.options.length?' Options: '+decision.options.map((o,i)=>`${i+1}. ${o.label}`).join('; '):'')};
+      result.executedActions=decision.actions.map(a=>a.action);
+      result.options=structuredClone(decision.options);
+      if(decision.status==='clarify'){result.questionId=card.id;result.question=decision.message;}
+      if(decision.actions.some(a=>a.action==='add_todo'))result.createdTodoIds=this.state.todos.filter(t=>!before.todos.some(b=>b.id===t.id)).map(t=>t.id);
+      if(decision.actions.some(a=>a.action==='open_image'))result.imageJobId=this.state.imageJobId;
+      if(decision.actions.some(a=>['get_weather','compose_weather','open_weather_view'].includes(a.action))){
+        const view=weatherView(this.state.weather,this.now()),composition=this.state.weather.composition;
+        result.weatherAvailable=view.status==='ready'&&(composition?composition.data.complete:this.state.weather.view==='now'||(this.state.weather.view==='tomorrow'?view.daily.length>1:view.daily.length>0));
+      }
+      if(decision.actions.some(a=>['compose_research','open_research_view'].includes(a.action)))result.researchArtifact=structuredClone(this.state.research);
       if(decision.actions.some(a=>a.action==='compose_weather'))result.compositionId=this.state.weather.composition.id;
       if(decision.actions.some(a=>a.action==='compose_research'))result.compositionId=this.state.research.id;
+      // A workflow's own receipt survives the rolling chat receipt window. Store
+      // it in the SAME atomic save as the tool mutation, before runner progress.
+      for(const run of this.state.workflows||[])for(const step of run.steps)if(step.operationId===id)step.receipt=structuredClone(result);
       const promotion=this.learnQuickActions?promoteQuickAction(before,decision,utterance,this.now()):null;
       if(promotion)this.state.quickActions=[...(this.state.quickActions||[]).filter(e=>e.phrase!==promotion.phrase),promotion].slice(-64);
       this.state.assistantReceipts=[...(this.state.assistantReceipts||[]),{id,result}].slice(-500);
@@ -203,8 +217,8 @@ export class Session {
       s.weather.view=args.period;s.weather.composition=null;s.viewOffer=null;s.panel='weather';return;
     }
     if (action === 'show') {
-      if (!['home','time','timers','todos','weather','research','studio','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
-      s.viewOffer=null;s.panel = args.panel; return;
+      if (!['home','time','timers','todos','weather','research','studio','workflows','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
+      s.viewOffer=null;s.panel = args.panel;if(args.panel==='workflows')s.message='';return;
     }
     if (action === 'start_timer') {
       if (!Number.isInteger(args.seconds) || args.seconds < 1 || args.seconds > 86400 || s.timers.length >= 20) throw new Error('Use 1–86400 seconds; maximum 20 timers');

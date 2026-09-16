@@ -30,9 +30,17 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    audio, child-speech coverage and provider privacy requirements remain gates.
    See [evidence and limitations](PLAYROOM.md). Generated artwork is not completion
    of the application's image-generation API integration.
-4. **Adaptable workflows** — pending: durable multi-step task progress, resume,
-   refinement and cancellation; reusable parameterized flows; sandboxed custom
-   UX/code creation with validation and promotion, not arbitrary host execution.
+4. **Adaptable workflows** — implemented durable ordered plans, named inputs,
+   background guarded step execution, tool/human completion evidence, resumable
+   questions, cancellation and restart recovery. Plans auto-save; parameterized
+   fresh runs and separate adapted recipes preserve prior work. Local plan routes
+   bypass plan creation, but general compiled step fast paths remain follow-up.
+   Browser controls and physical portrait layout verified offline. One live plan
+   creation test failed closed on a provider status/action mismatch; structured
+   contract hardening and a paid retest remain required. Spoken mixed-provider
+   runs remain unverified. See [workflows](WORKFLOWS.md).
+   **Still pending:** sandboxed custom UX/code creation with validation and
+   promotion, not arbitrary host execution. Missing-capability steps stop honestly.
 5. **Integration/polish** — pending: expectation-setting, timer language gaps,
    wake calibration, microphone/speaker replay, restart/reuse verification.
 

@@ -59,6 +59,13 @@ connection still shows a stale-data warning.
   re-runs the query rather than pretending old facts are current. See [research](docs/RESEARCH.md).
 - Save configured requests as recipes; fork preferences without modifying originals.
 - Shared live updates and reconnect status.
+- Durable multi-step workflows: saved plans with fresh parameter binding, guarded
+  research/weather/list/artwork execution, resumable questions, human confirmations,
+  pause/cancel, and evidence-backed progress. Companion controls and a non-touch
+  mirror progress view are implemented and tested offline. A live planning smoke
+  test was safely rejected for an inconsistent provider response; fixing that
+  contract and retesting remain prerequisites for live readiness. Custom code
+  execution is not yet available. See [workflows](docs/WORKFLOWS.md).
 - Image studio: asynchronous GPT Image 2.5 Sunburst adapter, progress, cancellation,
   persistent artwork/recipes and free local reopening. Real telemetry integration
   is regression-tested; ledger settlement failures pause new generation. Provider access is still

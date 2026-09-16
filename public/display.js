@@ -15,6 +15,7 @@
   function render(state){
     lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':state.panel==='research'?' research-open':state.panel==='playroom'?' playroom-open':state.panel==='studio'?' studio-open':'');
     var html='';
+    if(state.panel==='workflows'){document.body.className='mirror-display workflow-open';html=window.GlassWorkflow.render(state,false);}
     if(state.panel==='studio')html=window.GlassStudio.render(state,false);
     if(state.panel==='playroom')html=window.GlassPlayroom.render(state.playroom);
     if(state.panel==='research')html=window.GlassResearch.render(state.research,false);
@@ -26,7 +27,7 @@
     if(state.panel==='saved')html=(state.weatherViews||[]).slice(0,3).map(function(v){return '<article><h3>'+esc(v.spec.title)+'</h3><p>'+esc(v.spec.range.replace(/_/g,' '))+' · '+esc(v.spec.focus)+' focus</p></article>';}).join('')+html;
     // Timers remain visible regardless of the requested panel.
     html+=state.timers.map(function(t){return '<article><span class="tag">'+esc(t.label)+'</span><div class="countdown" data-end="'+t.endsAt+'"></div></article>';}).join('');
-    document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html+window.GlassSurface.saveOffer(state);tick();window.GlassSurface.rendered(state);
+    document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html+window.GlassWorkflow.strip(state)+window.GlassSurface.saveOffer(state);tick();window.GlassSurface.rendered(state);
   }
   function tick(){
     var d=new Date();document.getElementById('clock').textContent=d.toLocaleTimeString([],timeOptions);

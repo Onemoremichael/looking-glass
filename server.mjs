@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Session } from './session.mjs';
 import { Voice } from './voice.mjs';
 import { Telemetry } from './telemetry.mjs';
-import { SurfaceRegistry } from './assistant-contract.mjs';
+import { SurfaceRegistry,validateDecision } from './assistant-contract.mjs';
 import { Assistant } from './assistant.mjs';
 import { AgentsPlanner } from './agents-planner.mjs';
 import { ApiBudget } from './api-budget.mjs';
@@ -13,6 +13,7 @@ import {Weather} from './weather.mjs';
 import {MirrorAudio} from './mirror-audio.mjs';
 import {Wake} from './wake.mjs';
 import {ImageStudio} from './image-studio.mjs';
+import {Workflows} from './workflows.mjs';
 
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
 const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png' };
@@ -20,6 +21,7 @@ Object.assign(files,{'/weather-ui.js':'weather-ui.js','/weather.css':'weather.cs
 Object.assign(files,{'/research-ui.js':'research-ui.js','/research.css':'research.css'});
 Object.assign(files,{'/playroom-ui.js':'playroom-ui.js','/playroom.css':'playroom.css','/playroom-controls.js':'playroom-controls.js'});
 Object.assign(files,{'/studio-ui.js':'studio-ui.js','/studio.css':'studio.css','/studio-controls.js':'studio-controls.js'});
+Object.assign(files,{'/workflow-ui.js':'workflow-ui.js','/workflow.css':'workflow.css','/workflow-controls.js':'workflow-controls.js'});
 for(const name of ['elephant','giraffe','penguin','bear'])files['/assets/playroom/'+name+'-v1.png']='assets/playroom/'+name+'-v1.png';
 for(const kind of ['cloud','sun','moon','rain','storm','snow','fog']){
   files['/assets/weather/'+kind+'-volume-v1.png']='assets/weather/'+kind+'-volume-v1.png';
@@ -36,6 +38,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
   const budgetPath=fileURLToPath(new URL('./data/api-test-budget.json',import.meta.url));
   const studio=new ImageStudio({session,budget:new ApiBudget(budgetPath),directory:fileURLToPath(new URL('./data/artwork',import.meta.url)),telemetry,...studioOptions});
   const assistant=assistantOptions?new Assistant({session,surfaces,telemetry,weather,studio,planner:assistantOptions.planner||new AgentsPlanner({budget:new ApiBudget(budgetPath),telemetry})}):undefined;
+  const workflows=new Workflows({session,assistant,studio,telemetry});if(assistant)assistant.workflows=workflows;
   const voice = new Voice({ session, telemetry, assistant, budgetPath, ...voiceOptions,
     publish: state => { for (const client of clients) client.write(`event: voice\ndata: ${JSON.stringify(state)}\n\n`); } });
   const wake=new Wake({voice,mirror:mirrorAudio,...wakeOptions,publish:state=>{
@@ -58,6 +61,12 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
         if(path==='/api/telemetry')return json(200,telemetry?.snapshot()||{records:[],metrics:{},exportEnabled:false,captureTranscripts:false});
       }
       if (req.method === 'GET' && path === '/api/state') return json(200, session.state);
+      if(req.method==='POST'&&path==='/api/workflows'){
+        if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress)||req.headers.origin!==localOrigin||!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(403,{error:'Local same-origin JSON required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>16000)return json(413,{error:'Request too large'});}
+        try{const b=JSON.parse(raw);validateDecision({status:'execute',outcome:'Workflow control',message:'Requested',actions:[b.command],options:[],selectedOptionId:null});return json(200,workflows.handle(b.requestId,b.command,{revision:b.revision,utterance:b.confirmed===true?'Confirmed done using companion':''}));}
+        catch(e){return json(409,{error:e.message});}
+      }
       if(req.method==='GET'&&/^\/artwork\/[0-9a-f-]{36}\.png$/.test(path)){
         try{const bytes=studio.read(path.slice(9,-4));res.writeHead(200,{'Content-Type':'image/png'});return res.end(bytes);}catch{return json(404,{error:'Artwork not found'});}
       }
@@ -146,6 +155,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
           else if(body.action==='start'&&body.adultRehearsal===true){
             if(voice.active||wake.state.enabled)throw Error('End voice and wake listening before entering rehearsal');
             if(studio.active)throw Error('Finish or cancel image generation before entering rehearsal');
+            if(workflows.active)throw Error('Pause the workflow before entering rehearsal');
             session.startPlayroom(body.kind);
           }else throw Error('Adult-only rehearsal must be acknowledged; child deployment is not enabled');
           return json(200,{ok:true});
@@ -161,8 +171,8 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
       json(404, { error: 'Not found' });
     } catch { if (!res.headersSent) json(500, { error: 'Request failed' }); else res.end(); }
   });
-  return { server, session, voice, weather,wake,studio, close: async () => {
-    try { await studio.close();await wake.close();await weather.close();await voice.stop(undefined,'shutdown'); await assistant?.planner.drain?.(); }
+  return { server, session, voice, weather,wake,studio,workflows, close: async () => {
+    try { await workflows.close();await studio.close();await wake.close();await weather.close();await voice.stop(undefined,'shutdown'); await assistant?.planner.drain?.(); }
     finally { mirrorAudio?.close();session.close(); for (const client of clients) client.end(); server.close(); await telemetry?.close(); }
   } };
 }
