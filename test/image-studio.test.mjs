@@ -8,6 +8,7 @@ import {Session} from '../session.mjs';
 import {Assistant} from '../assistant.mjs';
 import {ImageStudio,IMAGE_MODEL,imageIntent,validatePng} from '../image-studio.mjs';
 import {ApiBudget} from '../api-budget.mjs';
+import {Telemetry} from '../telemetry.mjs';
 import {createApp} from '../server.mjs';
 const spec={title:'Moon fox',prompt:'A felt fox sitting on a crescent moon, isolated.',background:'transparent'};
 const png=readFileSync(new URL('../public/assets/playroom/elephant-v1.png',import.meta.url));
@@ -16,8 +17,9 @@ function fixture(t,generate){
   const session=new Session({file:join(dir,'state.json')}),path=join(dir,'budget.json');
   writeFileSync(path,JSON.stringify({approvedUSD:25,runs:[]}));const budget=new ApiBudget(path);
   let calls=0;const client={images:{generate:async(...args)=>{calls++;return generate?generate(...args):{data:[{b64_json:png.toString('base64')}],usage:{input_tokens:40,output_tokens:2000}};}}};
-  const studio=new ImageStudio({session,budget,client,directory:dir,timeoutMs:1000});
-  return {dir,session,budget,studio,client,calls:()=>calls};
+  const telemetry=new Telemetry();t.after(()=>telemetry.close());
+  const studio=new ImageStudio({session,budget,client,directory:dir,timeoutMs:1000,telemetry});
+  return {dir,session,budget,studio,client,telemetry,calls:()=>calls};
 }
 test('image jobs complete, persist art and recipe, deduplicate and reopen for free',async t=>{
   const f=fixture(t,(body,options)=>{assert.equal(body.model,IMAGE_MODEL);assert.equal(body.n,1);assert.equal(body.moderation,'auto');assert.equal(options.maxRetries,0);return {data:[{b64_json:png.toString('base64')}]};});
@@ -25,6 +27,9 @@ test('image jobs complete, persist art and recipe, deduplicate and reopen for fr
   assert.equal(f.studio.start('one',spec).jobId,accepted.jobId);
   await f.studio.active.promise;
   assert.equal(f.calls(),1);assert.equal(f.session.state.imageJobs[0].status,'completed');assert.deepEqual(f.studio.read(accepted.jobId),png);
+  assert.equal(f.telemetry.snapshot().metrics['image.generate'].count,1);
+  assert.equal(f.telemetry.snapshot().metrics['image.generate'].errors,0);
+  assert.doesNotMatch(JSON.stringify(f.telemetry.snapshot()),/felt fox|Moon fox|b64_json/);
   assert.equal(f.studio.start('two',spec).jobId,accepted.jobId);assert.equal(f.calls(),1);
   const restored=new Session({file:join(f.dir,'state.json')});assert.equal(restored.state.imageJobs[0].spec.prompt,spec.prompt);
   assert.deepEqual(imageIntent('show moon fox',restored.state),{action:'open_image',jobId:accepted.jobId});
@@ -78,7 +83,7 @@ test('studio renderer escapes prompts, uses only local assets and no controls on
   assert.match(html,/&lt;script&gt;/);assert.match(html,/\/artwork\//);assert.doesNotMatch(html,/<(?:button|input|a |script)/);assert.doesNotMatch(src,/\b(?:let|const)\b|=>/);
 });
 test('studio HTTP enforces origin, persists and serves PNGs, rejects secret paths',async t=>{
-  const f=fixture(t),origins=[],app=createApp({origins,studioOptions:{client:f.client,budget:f.budget,directory:f.dir}});
+  const f=fixture(t),origins=[],app=createApp({origins,telemetry:f.telemetry,studioOptions:{client:f.client,budget:f.budget,directory:f.dir}});
   await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(()=>app.close());const origin='http://127.0.0.1:'+app.server.address().port;origins.push(origin);
   const body=JSON.stringify({action:'generate',requestId:'http-one',spec});
   assert.equal((await fetch(origin+'/api/studio',{method:'POST',headers:{'content-type':'application/json'},body})).status,403);
@@ -86,4 +91,32 @@ test('studio HTTP enforces origin, persists and serves PNGs, rejects secret path
   if(app.studio.active)await app.studio.active.promise;
   const image=await fetch(origin+'/artwork/'+job.jobId+'.png');assert.equal(image.status,200);assert.equal(image.headers.get('content-type'),'image/png');
   assert.equal((await fetch(origin+'/.env')).status,404);
+});
+test('telemetry start or end failure cannot strand a job or discard completed artwork',async t=>{
+  for(const stage of ['start','end']){
+    const f=fixture(t);f.studio.telemetry={start:()=>{if(stage==='start')throw Error('observer failed');return {end:()=>{throw Error('observer failed');}};}};
+    const j=f.studio.start('one',spec);await f.studio.active.promise;
+    assert.equal(f.session.state.imageJobs[0].status,'completed');assert.equal(f.calls(),1);assert.deepEqual(f.studio.read(j.jobId),png);
+  }
+});
+test('ledger settlement failure is terminal, retained across restart and blocks new paid work',async t=>{
+  for(const providerFails of [false,true]){
+    const f=fixture(t,providerFails?()=>{throw Error('network failure');}:undefined);let attempts=0;
+    f.budget.finishImage=()=>{attempts++;throw Error('ledger unavailable');};
+    f.studio.start('one',spec);await f.studio.active.promise;
+    assert.equal(attempts,1);assert.equal(f.calls(),1);
+    const job=f.session.state.imageJobs[0];assert.equal(job.status,'failed');assert.equal(job.accounting,'unconfirmed');
+    assert.equal(f.telemetry.snapshot().metrics['image.generate'].errors,1);
+    const reservation=JSON.parse(readFileSync(f.budget.path)).runs[0];
+    assert.equal(reservation.status,'pending');assert.equal(job.accountingReservation,reservation.id);
+    assert.deepEqual(job.accountingUsage,providerFails?{}:{input_tokens:40,output_tokens:2000});
+    const restored=new Session({file:f.session.file}),studio=new ImageStudio({session:restored,budget:f.budget,directory:f.dir,client:f.client});
+    assert.throws(()=>studio.start('two',{...spec,prompt:'A different image.'}),/reconciliation/);assert.equal(f.calls(),1);
+  }
+});
+test('shutdown during completed-job publication does not relabel finished artwork',async t=>{
+  const f=fixture(t);let closing;
+  f.session.onChange=state=>{if(state.imageJobs?.[0]?.status==='completed'&&!closing)closing=f.studio.close();};
+  const j=f.studio.start('one',spec);await f.studio.active.promise;await closing;
+  assert.equal(f.session.state.imageJobs[0].status,'completed');assert.deepEqual(f.studio.read(j.jobId),png);
 });

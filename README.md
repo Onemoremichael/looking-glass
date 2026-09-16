@@ -54,13 +54,14 @@ connection still shows a stale-data warning.
 - State saved atomically to ignored `data/state.json`; restart preserves items.
 - Request capture and an example clarification flow for Gators sports.
 - Live, read-only web research assembled into cited briefing, agenda, comparison,
-  or step-by-step boards. Three large cards per page with voice paging. Recipes
+  or step-by-step boards. Two large cards per page with voice paging. Recipes
   save automatically; cached results reopen locally for 15 minutes, and refresh
   re-runs the query rather than pretending old facts are current. See [research](docs/RESEARCH.md).
 - Save configured requests as recipes; fork preferences without modifying originals.
 - Shared live updates and reconnect status.
 - Image studio: asynchronous GPT Image 2.5 Sunburst adapter, progress, cancellation,
-  persistent artwork/recipes and free local reopening. Provider access is still
+  persistent artwork/recipes and free local reopening. Real telemetry integration
+  is regression-tested; ledger settlement failures pause new generation. Provider access is still
   unverified; offline tests and physical-mirror fixture rendering pass. See
   [image workflow, budget accounting and limits](docs/IMAGE-STUDIO.md).
 - Adult-only playroom rehearsal: four illustrated animal cards and a bounded Pip
