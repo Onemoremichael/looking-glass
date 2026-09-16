@@ -8,9 +8,10 @@ every ordinary local action. Ask a focused question when the answer materially
 changes the outcome. Do not invent progress or promise future background delivery.
 
 GPT-Live-1 remains the quiet-start conversational frontend. Clear standalone timer
-starts now take a deterministic local accelerator (see [VOICE.md](VOICE.md)); the
+starts, explicit single-timer cancellations, and eligible learned phrases take a
+deterministic local accelerator (see [VOICE.md](VOICE.md)); the
 same atomic action contract, durable receipts and shared history still apply.
-Other task requests and clarification answers delegate to an Agents API session (not the Agents SDK).
+Unmatched task requests and clarification answers delegate to an Agents API session (not the Agents SDK).
 The backend uses GPT-5.4 Mini, low reasoning, schema-constrained JSON, no tools,
 no sandbox and no subagents. The model proposes actions; only the local app executes
 them. The cloud session is deleted after completion; interrupted sessions are
@@ -21,13 +22,70 @@ cancelled first. Deletion is not a claim of zero provider retention.
 `assistant-contract.mjs` defines the runtime manifest and validated schemas:
 time, panel selection, named timers, timer cancellation, to-do additions, explicit
 completion/incompletion, removal. Up to five actions commit atomically. No partial
-mutation if an action fails. Weather/calendar navigation displays placeholders only.
+mutation if an action fails. Weather is connected through a cached Open-Meteo adapter;
+`get_weather` selects now/today/tomorrow/week and an optional saved location ID, then
+returns an actual cache-derived summary. Calendar remains a placeholder. Weather
+context includes source timestamps and stale/setup/unavailable states. See [WEATHER.md](WEATHER.md).
 No web research, external messages, scheduled reminders, camera or background jobs.
 
 An execute message is composed from actual local results, not the model's proposed
 success wording. Clarification/limitation wording comes from the model and still
 needs behavioral evaluation. Model interpretation is not an authorization oracle;
 the app enforces the narrow action vocabulary and current target IDs.
+
+## Guarded quick-action repertoire
+
+The app learns a bounded mapping after successful reasoning, not executable code.
+The planner's structured decision includes `quickAction`: `null`,
+`cancel_only_timer`, or `show_panel`. Its instructions ask it to assess whether the
+whole standalone request can be reused without another reasoning step. No extra
+model call is needed for this assessment. Internal learning is not announced aloud.
+
+1. Unfamiliar wording goes through ordinary outcome planning and action validation.
+2. The model may nominate a template. Local code independently checks the whole
+   normalized phrase, template/action agreement, and the pre-action context.
+3. Only a successful, single-action commit saves a versioned entry in the same atomic
+   write as the action and receipt. Failure, cancellation, stale revision, pending
+   clarification, option selection, or a multi-action plan cannot promote it.
+4. Later, the exact normalized phrase selects a template. Known polite framing is
+   stripped; no substring match, embeddings, model-authored regex, or code is run.
+   Target IDs are resolved fresh and guards are rechecked at execution.
+
+Example: “get rid of the timer” initially reaches the planner. If one timer exists,
+the planner cancels it and nominates `cancel_only_timer`; the app records the phrase
+and eligibility reason, **not that timer's ID**. With a different single timer later,
+the same wording can run locally. Two timers means planner fallback, not a guess.
+“Clear/cancel/stop the timer” is built in already and does not need a learning run.
+
+Initial templates are deliberately narrow: cancel the only current timer, or show
+home/time/timers/to-dos when the phrase names that exact destination. A limited
+whole-request grammar gates promotion as well as reuse. Pronouns (“cancel it”),
+named targets, ambiguous card dismissal, conditions, negations and compound requests
+stay contextual. “Hide the timer card” must not silently become timer cancellation.
+This is a first reusable repertoire mechanism, not general self-programming: adding
+new action families still requires implementation, guards and deterministic tests.
+
+Up to 64 entries persist in ignored `data/state.json` as `quickActions`, deduplicated
+by phrase, with a template version, eligibility reason and learned timestamp.
+Incompatible versions are ignored. Entries contain user wording and are shared with
+trusted local surfaces as part of app state; they are not exported as telemetry.
+Older state files need no migration. Old transcript history is not automatically
+promoted because it lacks sufficient pre-action and validated-action evidence.
+
+`OPENAI_LEARNED_FAST_PATH=0` disables learning and learned reuse without erasing
+entries; built-in timer starts/cancellation remain available. The broader
+`OPENAI_TIMER_FAST_PATH=0` disables all local voice acceleration. Restart after
+changing environment configuration.
+
+Diagnostics record `quick_action.promoted` on the planner decision and
+`source: learned|builtin`, `template`, and the committed action on the existing
+`voice.timer_fast` span (legacy name retained). No phrase or entity ID is attached
+to exported trace metadata. The existing receipts, transcript-range reconciliation,
+quiet window, revision check and correction handling also protect learned actions.
+
+This follows the [OpenAI latency guidance](https://developers.openai.com/api/docs/guides/latency-optimization)
+to avoid unnecessary model round trips for deterministic work. It removes planning
+from eligible reuse, not Live transcription, network, or spoken-response latency.
 
 ## Shared visual context
 

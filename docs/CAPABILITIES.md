@@ -11,7 +11,7 @@ in `session.mjs` records current scope, execution path, and missing pieces.
 | Time & date | Local time/date; explicit time-zone preference | Local clock | Device clock/date work; preference pending |
 | Timers | Start, name, list, cancel, pause/resume; visual and audible completion | Local timer service with durable deadlines | Start/list/dismiss persist; visual only; pause/resume and sound pending |
 | To-dos | Add, review, complete, edit, remove | Local persistent list | Add/list/complete/incomplete/remove work; text editing pending |
-| Weather | Current conditions and short forecast for selected location/units | Direct provider lookup with short-lived cache | Setup placeholder; no forecast fetched |
+| Weather | Current, hourly and seven-day forecast for up to five saved cities; F/C | Open-Meteo lookup with ten-minute shared cache; common voice requests local | Implemented; city selection required; no alerts/radar/IP guessing |
 | Calendar review | Today, next event, upcoming week | Authorized read-only adapter with freshness tracking | Setup placeholder; no account connected |
 | Display controls | Show, dismiss, home, next/previous when content overflows | Local UI state | Voice/companion panel selection, shared clarification cards and render reports; paging/history pending |
 

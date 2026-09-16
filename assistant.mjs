@@ -1,4 +1,6 @@
 import { capabilities, presentation, validateDecision } from './assistant-contract.mjs';
+import {quickPhrase} from './quick-actions.mjs';
+import {weatherView} from './weather.mjs';
 export class Assistant {
   constructor({session,planner,surfaces,telemetry}){Object.assign(this,{session,planner,surfaces,telemetry});this.inflight=new Map();}
   execute(id,utterance,{signal,trace}={}) {
@@ -8,7 +10,7 @@ export class Assistant {
   }
   async run(id,utterance,{signal,trace}) {
     if(typeof utterance!=='string'||!utterance.trim()||utterance.length>4000)return {status:'needs_input',message:'I did not catch a request. Please say it again.'};
-    const state=structuredClone(this.session.state),revision=state.revision,view=presentation(state);
+    const state=structuredClone(this.session.state),revision=state.revision,view=presentation(state,this.session.now());
     const reports=this.surfaces?.snapshot(state)||[];
     if(/\b(?:the (?:first|second|third|fourth)|(?:first|second|third|fourth) (?:one|item|option|timer)|on (?:the )?(?:screen|mirror)|this (?:item|option)|that (?:item|option))\b/i.test(utterance)&&!reports.some(s=>s.visible&&s.current))return {status:'needs_input',message:'I cannot confirm the current display. Please repeat the item or option by name.'};
     const ordinal=utterance.trim().toLowerCase().replace(/[.!?,]/g,'').match(/^(?:(?:yes|yeah|yep|okay) )?(?:the )?(first|second|third|fourth|1|2|3|4)(?: one| option)?$/);
@@ -31,6 +33,7 @@ export class Assistant {
       const aliased=JSON.parse(JSON.stringify({
         utterance,capabilities,now:new Date(this.session.now()).toISOString(),timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,
         state:{revision,panel:state.panel,timers:state.timers,todos:state.todos},
+        weather:weatherView(state.weather,this.session.now()),
         presentation:view,surfaces:reports,history:state.assistantHistory||[],resolvedSelection,
       }),(key,value)=>typeof value==='string'&&reverse.has(value)?reverse.get(value):value);
       const decision=validateDecision(await this.planner.decide({
@@ -50,6 +53,8 @@ export class Assistant {
         if(affected.has(action.id))throw Error('Duplicate target action');affected.add(action.id);
       }
       const result=this.session.commitDecision(id,revision,decision,utterance);
+      const learned=(this.session.state.quickActions||[]).find(e=>e.phrase===quickPhrase(utterance)&&e.template===decision.quickAction);
+      if(learned&&!state.quickActions?.some(e=>e.phrase===learned.phrase&&e.template===learned.template&&e.panel===learned.panel))span?.event('quick_action.promoted',{template:learned.template,source:'learned'});
       span?.end({outcome:result.status,action:'assistant'});return result;
     }catch(error){span?.end({outcome:signal?.aborted?'cancelled':'error'});throw error;}
   }

@@ -34,3 +34,29 @@ test('questions, choices, limitations and answers remain visible without intent 
     if(status==='clarify'){assert.match(html,/<ol/);assert.match(html,/Tea &amp; toast/);}
   }
 });
+function clockOptions(search){
+  const elements={};
+  class Clock extends Date{
+    toLocaleTimeString(locale,options){return JSON.stringify(options);}
+    toLocaleDateString(locale,options){return JSON.stringify(options);}
+  }
+  runInNewContext(readFileSync(new URL('../public/display.js',import.meta.url),'utf8'),{
+    location:{search},Intl,Date:Clock,setInterval(){},
+    window:{GlassSurface:{subscribe(){}}},
+    document:{getElementById:id=>elements[id]??={},querySelectorAll:()=>[]}
+  });
+  return {time:JSON.parse(elements.clock.textContent),date:JSON.parse(elements.date.textContent)};
+}
+test('mirror timer cards omit the visual-alert disclaimer',()=>{
+  const source=readFileSync(new URL('../public/display.js',import.meta.url),'utf8');
+  assert.doesNotMatch(source,/Visual alerts? only/i);
+});
+test('mirror deployment can override UTC Android with an explicit IANA time zone',()=>{
+  const options=clockOptions('?timeZone=America%2FNew_York');
+  assert.equal(options.time.timeZone,'America/New_York');assert.equal(options.date.timeZone,'America/New_York');
+});
+test('absent, invalid and malformed time zones keep the device-local fallback',()=>{
+  for(const search of ['', '?timeZone=not-a-zone','?timeZone=%ZZ']){
+    const options=clockOptions(search);assert.equal(options.time.timeZone,undefined);assert.equal(options.date.timeZone,undefined);
+  }
+});

@@ -42,7 +42,8 @@ prompt a focused question; ordered options appear on both surfaces. “Yeah the 
 one” can resolve against the active card. Display-dependent selections require a fresh
 visible render report; ambiguous or stale references must not silently guess.
 
-Weather/calendar remain unconnected placeholders. No research, account access, scheduled
+Weather now uses the cached Open-Meteo adapter (see [WEATHER.md](WEATHER.md)); calendar
+remains an unconnected placeholder. No research, account access, scheduled
 reminders or durable background jobs. Timer alerts are visual only, not safety-critical
 alarms. Pause/resume, audible alarms, list text editing, overflow paging and real Back
 history remain gaps. Going Back/Home or dismissing a panel does not cancel timers.
@@ -150,7 +151,8 @@ This uses the Agents API, not the Agents SDK. Cloud sessions have no tools or sa
 
 The Android display loads ES5-style display/surface scripts and SSE, no WebRTC,
 microphone APIs, ES modules or native bridge. CSS fallbacks exist; this new pass has
-not been deployed or visually verified on the physical Android WebView. Native
+been visually verified on the physical Android WebView for clock and live timer
+rendering via USB forwarding (see INTEGRATION.md). Native
 AudioRecord/AudioTrack, permissions and echo cancellation remain separate work.
 
 ## Lifecycle, privacy and budget
@@ -200,7 +202,9 @@ needs a fresh human latency check:
    new request; verify a second timer. Then try a corrected duration.
 3. Request a timer without a duration; answer the clarification in a second turn.
 4. With two timers, ask for options, then choose the second displayed option.
-5. Ask for an unavailable forecast; verify honest limitation, not invented weather.
+5. Ask for weather without a configured place or while the provider is unavailable;
+   verify honest setup/stale/unavailable messaging. With a configured place, verify
+   the result against timestamped cached data. Calendar remains unavailable.
 6. Try correction/interruption, mute, End, a stale tab and connection failure.
 7. Inspect traces for speech-to-action and speech-to-audio; no instant-response claim.
 
@@ -216,3 +220,34 @@ Official references checked September 15, 2026:
 - https://developers.openai.com/api/docs/guides/voice-server-controls?api=live
 - https://developers.openai.com/api/docs/guides/live-delegation
 - https://developers.openai.com/api/docs/models/gpt-live-1
+
+## Clearing timers and learning quick actions
+
+The owner’s September 15 evening “clear the timer” run took 16.54 seconds from
+the final transcript fragment to commit; 14.09 seconds was Agents planning.
+The recorded three-fragment replay now cancels at +700 ms after the final fragment,
+with zero planner calls and one verified confirmation, even with a late handoff.
+This is a deterministic result, not a new measured human speech-to-audio benchmark.
+
+Explicit single-timer cancellation is now built in. Successful planner work can also
+nominate a supported phrase-to-template mapping for future local reuse, saved with
+the action. See [eligibility and persistence](ASSISTANT.md#guarded-quick-action-repertoire).
+The fast lane does not use stale target IDs or infer which of multiple timers to cancel.
+The new runtime changes are server-side; Android's old WebView remains output-only.
+
+Regression checks (99 automated tests across the repository pass as of September 16,
+2026, with no paid calls in the test suite):
+
+- Create one timer; say “clear the timer.” Verify prompt removal and one confirmation.
+- Ask “get rid of the timer” with one timer. If the planner nominates it, diagnostics
+  show `quick_action.promoted`. Create another timer and repeat: look for
+  `voice.timer_fast` with `source: learned` and no planning for that request.
+- Repeat with two timers or a pending clarification: no speculative cancellation.
+- “Hide the timer card” and “cancel it” still need contextual interpretation.
+- Learning survives server restart; failed storage, stale results and interrupted
+  planning never save a shortcut. Subsequent corrections within the quiet window
+  cancel the tentative fast route.
+
+No paid API validation was run for the new nomination field in this pass. Its schema,
+commit/persistence behavior, recorded cancellation flow, and learned reuse are tested
+locally; the model's nomination behavior still needs a human or paid synthetic run.

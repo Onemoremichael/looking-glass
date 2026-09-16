@@ -46,5 +46,52 @@ validated component registry will support agent-selected layouts, not arbitrary 
 or scripts. sourceStatus is not_connected until a real adapter is implemented.
 
 Port 8780 is independent of mirror-mirror Android remote 8765 and clock lab 8766.
-No ADB calls or device modifications. Timers are local application data, not Codex
+The server makes no ADB calls or device modifications. Timers are local application data, not Codex
 automations or operating-system alarms.
+
+## Physical Mirror test (September 15, 2026)
+
+The existing Afterglow WebView wrapper successfully renders Looking Glass in
+1080×1920 portrait on the recovered Android 6.0.1 device. A temporary timer was
+created, visually verified on the device, and removed. No APK or firmware was flashed.
+This is display verification; microphone and spoken responses still use the Mac.
+
+With the local server running and authorized USB connected:
+
+```sh
+adb -s be9d0af reverse tcp:8780 tcp:8780
+adb -s be9d0af shell am start -n dev.mirror.clock/.ClockActivity \
+  --es url 'http://127.0.0.1:8780/?timeZone=America%2FNew_York' \
+  --es orientation portrait
+```
+
+The USB reverse tunnel keeps the server bound to Mac loopback; no LAN listener or
+firewall change is required. Keep USB connected for this test and repeat `reverse`
+after reconnecting. The wrapper remembers the URL; if unreachable, its existing
+fallback shows the bundled Afterglow clock and retries. Android Home is unchanged.
+The optional `timeZone` query sets the display clock/date to a valid IANA zone,
+because this Android image defaults to UTC. Invalid/absent zones use device time.
+Timer deadlines are absolute timestamps and unaffected by this formatting option.
+
+Wi-Fi ADB remains configured at `192.168.0.51:5555`, but the Mac reported “No route
+to host” during this deployment despite the Mirror reaching the Mac by ping.
+Wireless deployment is not verified in this pass; USB is the confirmed path.
+
+### Refresh after frontend changes (September 16, 2026)
+
+SSE updates application state, not already-loaded JavaScript or CSS. The first
+weather voice test selected the weather panel successfully, but the physical
+Mirror still rendered the old “not connected” placeholder. Restarting just the
+wrapper loaded the new frontend; a device screenshot verified the Gainesville
+current conditions, hourly forecast, three-day rows, and Fahrenheit units.
+
+If an already-running wrapper merely reports “task has been brought to the front”,
+explicitly restart it before the `am start` command above:
+
+```sh
+adb -s be9d0af shell am force-stop dev.mirror.clock
+```
+
+This stops only the display wrapper; it does not erase app data, weather settings,
+or timers. No firmware or APK update is needed. A reconnect alone does not update
+the loaded frontend, so repeat this refresh after deploying new display assets.

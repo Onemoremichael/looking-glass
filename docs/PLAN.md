@@ -42,7 +42,9 @@ validation. Hardware audio and Android upgrades remain deferred.
 3. Add a durable job runner: queued/running/needs_input/blocked/completed/failed/
    cancelled, event log, task revisions and explicit cancellation. Recover interrupted
    jobs on startup. Only then promise background work and in-app completion delivery.
-4. Weather: explicit city/units, provider, timestamps and cache expiry. Calendar:
+4. Weather first pass complete: five explicit saved cities, F/C, Open-Meteo, cache
+   timestamps/expiry and mirror-first rain/sky treatment; see [WEATHER.md](WEATHER.md).
+   Next: physical readability tuning, richer rain study, optional opt-in coarse location. Calendar:
    explicit account authorization and read-only first. Do not infer account access.
 5. Gators vertical slice: resolve sports/watch/attend scope, verify schedules against
    authoritative sources, normalize events, render an agenda, then offer Keep.

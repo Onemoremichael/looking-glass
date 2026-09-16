@@ -44,7 +44,7 @@ test('to-do voice receipts survive restart; dismissing does not cancel a timer',
   tools.execute('list','show my to-do list');assert.equal(session.state.panel,'todos');
   for(const panel of ['weather','calendar']) {
     const result=tools.execute(panel,'show '+panel);
-    assert.equal(session.state.panel,panel);assert.match(result.message,/No provider is connected/);
+    assert.equal(session.state.panel,panel);assert.match(result.message,panel==='weather'?/Choose a weather location/:/No provider is connected/);
   }
 });
 test('reported add-and-show utterance executes once; unrelated compound actions stay rejected',()=>{
@@ -174,6 +174,67 @@ test('explicit duration correction within quiet window starts only the corrected
   input(c.ws,' a minute');t.mock.timers.tick(700);
   assert.equal(c.voice.session.state.timers.length,1);
   assert.equal(c.voice.session.state.timers[0].endsAt,Date.now()+60000);
+});
+test('cached weather reads use the fast lane and factual summary without disturbing timers',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:Date.parse('2026-09-16T12:00:00Z')});
+  let calls=0;const c=await controlled(t,{fastTimers:true,assistant:{execute:()=>{calls++;throw Error('unexpected planning');}}});t.after(()=>c.voice.stop());
+  const s=c.voice.session;s.command('start_timer',{seconds:60});
+  s.state.weather={locations:[{id:'1',name:'Test City',timeZone:'UTC'}],activeId:'1',units:'celsius',view:'now',errors:{},forecasts:{'1':{units:'celsius',timeZone:'UTC',fetchedAt:Date.now(),current:{time:Date.now(),temp:22,feels:23,label:'Rain'},daily:[],hourly:[]}}};
+  input(c.ws,"What's the weather like?");t.mock.timers.tick(700);
+  assert.equal(s.state.panel,'weather');assert.equal(s.state.timers.length,1);assert.equal(calls,0);assert.match(c.ws.sent[0].content,/22 degrees Celsius, rain/);
+  handoff(c.ws,'late-weather');t.mock.timers.tick(900);assert.equal(c.ws.sent.filter(e=>e.type==='session.commentary.append').length,1);
+});
+test('recorded Clear the timer flow cancels at +700ms, skips planning and reconciles late delegation',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
+  let calls=0;const telemetry=new Telemetry();
+  const c=await controlled(t,{fastTimers:true,telemetry,assistant:{execute:()=>{calls++;throw Error('unexpected planning');}}});
+  t.after(async()=>{await c.voice.stop();await telemetry.close();});
+  c.voice.session.command('start_timer',{seconds:30});
+  for(const [gap,text] of [[0,' Clear'],[145,' the'],[398,' timer']]){
+    t.mock.timers.tick(gap);input(c.ws,text,Date.now()-1000);
+    assert.equal(c.voice.session.state.timers.length,1);
+  }
+  t.mock.timers.tick(699);assert.equal(c.voice.session.state.timers.length,1);
+  t.mock.timers.tick(1);assert.equal(c.voice.session.state.timers.length,0);
+  handoff(c.ws,'late-clear',643);handoff(c.ws,'late-clear',643);t.mock.timers.tick(900);
+  assert.equal(calls,0);assert.equal(c.ws.sent.filter(e=>e.type==='session.commentary.append').length,1);
+  assert.equal(c.ws.sent[0].content,'Timer cancelled.');
+  const spans=telemetry.records.filter(r=>r.name==='voice.timer_fast');
+  assert.equal(spans[0].attributes.since_last_fragment_ms,700);
+  assert.equal(spans[0].attributes.source,'builtin');assert.equal(spans[1].attributes.action,'cancel_timer');
+  assert.equal(c.voice.session.state.quickActions,undefined); // built-ins need no learned entry
+});
+test('learned cancellation uses fast receipts and re-resolves each later timer',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
+  let calls=0;const telemetry=new Telemetry();
+  const c=await controlled(t,{fastTimers:true,telemetry,assistant:{execute:()=>{calls++;throw Error('unexpected planning');}}});
+  t.after(async()=>{await c.voice.stop();await telemetry.close();});
+  const s=c.voice.session;s.command('start_timer',{seconds:30});
+  s.commitDecision('learn',s.state.revision,{
+    status:'execute',outcome:'Cancel timer',message:'Done',actions:[{action:'cancel_timer',id:s.state.timers[0].id}],
+    options:[],selectedOptionId:null,quickAction:'cancel_only_timer',
+  },'get rid of the timer');
+  for(const offset of [0,3000]){
+    s.command('start_timer',{seconds:30});input(c.ws,'Please get rid of the timer.',offset);
+    t.mock.timers.tick(700);assert.equal(s.state.timers.length,0);
+    handoff(c.ws,'late-'+offset,offset+100);t.mock.timers.tick(900);
+  }
+  assert.equal(calls,0);assert.equal(c.ws.sent.filter(e=>e.type==='session.commentary.append').length,2);
+  assert.equal(telemetry.records.filter(r=>r.name==='voice.timer_fast'&&r.attributes.source==='learned').length,2);
+});
+test('cancellation corrections and ambiguity stay on the planner; changed state blocks fast commit',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
+  const jobs=[];const c=await controlled(t,{fastTimers:true,assistant:{execute:(id,text)=>{jobs.push(text);return new Promise(()=>{});}}});
+  t.after(()=>c.voice.stop());const s=c.voice.session;
+  s.command('start_timer',{seconds:30});input(c.ws,'clear the timer');handoff(c.ws,'correct');
+  t.mock.timers.tick(650);input(c.ws,', actually leave it');t.mock.timers.tick(900);
+  assert.equal(s.state.timers.length,1);assert.deepEqual(jobs,['clear the timer, actually leave it']);
+  const d=await controlled(t,{fastTimers:true});t.after(()=>d.voice.stop());
+  d.voice.session.command('start_timer',{seconds:30});input(d.ws,'clear the timer');
+  t.mock.timers.tick(699);d.voice.session.command('start_timer',{seconds:60});t.mock.timers.tick(1);
+  assert.equal(d.voice.session.state.timers.length,2);assert.equal(d.ws.sent.length,0);
+  d.voice.active.cursor=d.voice.active.transcript.length;input(d.ws,'clear the timer',3000);t.mock.timers.tick(700);
+  assert.equal(d.voice.session.state.timers.length,2);assert.equal(d.ws.sent.length,0);
 });
 test('uncertain timer fallback records a category once at dispatch, not on every fragment',async t=>{
   t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});

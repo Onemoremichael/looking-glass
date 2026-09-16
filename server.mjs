@@ -9,16 +9,23 @@ import { SurfaceRegistry } from './assistant-contract.mjs';
 import { Assistant } from './assistant.mjs';
 import { AgentsPlanner } from './agents-planner.mjs';
 import { ApiBudget } from './api-budget.mjs';
+import {Weather} from './weather.mjs';
 
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
-const types = { html: 'text/html', js: 'text/javascript', css: 'text/css' };
+const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png' };
+Object.assign(files,{'/weather-ui.js':'weather-ui.js','/weather.css':'weather.css','/weather-controls.js':'weather-controls.js'});
+for(const kind of ['cloud','sun','moon','rain','storm','snow','fog']){
+  files['/assets/weather/'+kind+'-volume-v1.png']='assets/weather/'+kind+'-volume-v1.png';
+}
 
-export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}, telemetry, assistantOptions } = {}) {
+export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}, telemetry, assistantOptions,weatherOptions={} } = {}) {
   const clients = new Set();
   const surfaces=new SurfaceRegistry();
   const session = new Session({ ...sessionOptions, onChange: state => {
     for (const client of clients) client.write(`data: ${JSON.stringify(state)}\n\n`);
+    queueMicrotask(()=>weather.refresh().catch(()=>{}));
   } });
+  const weather=new Weather({session,...weatherOptions});weather.start();
   const budgetPath=fileURLToPath(new URL('./data/api-test-budget.json',import.meta.url));
   const assistant=assistantOptions?new Assistant({session,surfaces,telemetry,planner:assistantOptions.planner||new AgentsPlanner({budget:new ApiBudget(budgetPath),telemetry})}):undefined;
   const voice = new Voice({ session, telemetry, assistant, budgetPath, ...voiceOptions,
@@ -40,6 +47,15 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
       }
       if (req.method === 'GET' && path === '/api/state') return json(200, session.state);
       if (req.method === 'GET' && path === '/api/voice') return json(200, voice.state);
+      if(req.method==='POST'&&path==='/api/weather'){
+        if(req.headers.origin!==localOrigin||!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(403,{error:'Same-origin JSON required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>1024)return json(413,{error:'Request too large'});}
+        let body;try{body=JSON.parse(raw);if(!body||typeof body!=='object')throw Error();}catch{return json(400,{error:'Invalid weather request'});}
+        try{
+          if(body.action==='search')return json(200,{results:await weather.search(body.query)});
+          weather.settings(body);return json(200,{ok:true});
+        }catch(e){return json(400,{error:e.message});}
+      }
       if(req.method==='POST'&&path==='/api/surface') {
         if(req.headers.origin!==localOrigin||!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(403,{error:'Same-origin JSON required'});
         let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>1024)return json(413,{error:'Request too large'});}
@@ -86,14 +102,15 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
       if (req.method === 'GET' && files[path]) {
         const name = files[path];
         const data = await readFile(new URL(`./public/${name}`, import.meta.url));
-        res.writeHead(200, { 'Content-Type': `${types[name.split('.').pop()]}; charset=utf-8` });
+        const mime=types[name.split('.').pop()];
+        res.writeHead(200, { 'Content-Type': mime+(mime.startsWith('text/')?'; charset=utf-8':'') });
         return res.end(data);
       }
       json(404, { error: 'Not found' });
     } catch { if (!res.headersSent) json(500, { error: 'Request failed' }); else res.end(); }
   });
-  return { server, session, voice, close: async () => {
-    try { await voice.stop(undefined,'shutdown'); await assistant?.planner.drain?.(); }
+  return { server, session, voice, weather, close: async () => {
+    try { await weather.close();await voice.stop(undefined,'shutdown'); await assistant?.planner.drain?.(); }
     finally { session.close(); for (const client of clients) client.end(); server.close(); await telemetry?.close(); }
   } };
 }

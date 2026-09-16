@@ -6,7 +6,7 @@ should be fast; new requests can become reusable, adaptable capabilities.
 ## Starter scope
 
 Ship time/date, timers, to-dos, weather, read-only calendar review, and display
-controls as built-ins. Weather/calendar require setup; they are not implemented yet.
+controls as built-ins. Weather is connected after choosing a city; calendar is not implemented yet.
 Use local tools or cached lookups for familiar actions and agent-driven composition
 for novel requests. Useful compositions can be saved and forked.
 
@@ -40,6 +40,11 @@ connection still shows a stale-data warning.
 ## Working now
 
 - Local clock, timers with absolute deadlines, and a to-do list.
+- Open-Meteo weather: up to five saved cities, Fahrenheit by default/Celsius option,
+  current conditions, hourly outlook and seven-day forecast. Oversized mirror typography,
+  transparent dimensional weather artwork and a contrasting four-reading forecast strip.
+  Small art uses dark-blue backplates; rain has fine independently animated hero streaks
+  and static forecast marks, with reduced-motion support.
 - State saved atomically to ignored `data/state.json`; restart preserves items.
 - Request capture and an example clarification flow for Gators sports.
 - Explicit blocked status when research requires an unconnected data provider/worker.
@@ -54,6 +59,10 @@ connection still shows a stale-data warning.
   wording and explicit in-turn duration replacements are understood locally.
   Late handoffs do not duplicate the timer; unclear corrections, missing durations
   and contextual requests retain the planner fallback. Traces explain each fallback.
+- “Clear/cancel/stop the timer” also takes the local fast lane when exactly one
+  timer exists. After successful planning, the model can nominate eligible wording
+  for a persisted quick-action repertoire. Current learned templates cover single-timer
+  cancellation and home/time/timers/to-dos navigation; every reuse checks live context.
 - Shared numbered clarification cards, recent conversation context, surface render
   acknowledgments, and stable choice IDs for replies such as “yeah, the second one.”
 - Validated, atomic batches and durable receipts; stale or cancelled decisions cannot commit.
@@ -93,8 +102,8 @@ restart after editing it. `.env` is git-ignored and is not served to browsers.
 Adding a key alone does not start a paid session. The local approved-budget ledger
 is also required; this prototype fails closed if it is absent. It is not an account-wide billing cap.
 
-Agents API is connected for outcome planning (not web research). Weather, calendar,
-live sports data, and camera are not connected.
+Agents API is connected for outcome planning (not web research). Weather uses the
+separate Open-Meteo adapter; calendar, live sports data and camera are not connected.
 Typed requests use limited local rules—not language-model reasoning. Saved views
 are configurations, not researched results. No automatic or scheduled work runs.
 The old enchanted-face direction has been replaced by this practical foundation.
@@ -103,12 +112,38 @@ See [the outcome-first assistant](docs/ASSISTANT.md) for architecture, limits an
 verification. GPT-Live-1 handles audio; `OPENAI_AGENT_MODEL` defaults to GPT-5.4 Mini
 for decisions with `OPENAI_AGENT_REASONING=low`. A `none` trial guessed a missing
 timer duration, so it was not adopted. `OPENAI_AGENT_ENABLED=0` restores the legacy
-phrase parser. `OPENAI_TIMER_FAST_PATH=0` independently disables the timer accelerator.
+phrase parser. `OPENAI_TIMER_FAST_PATH=0` disables the entire local voice accelerator,
+including cancellation and learned routes. `OPENAI_LEARNED_FAST_PATH=0` disables
+only promotion and learned reuse, without deleting saved entries.
 Timer fast-path tests commit at 700 ms after the last transcript fragment without an
 Agents call; actual speech-to-display/audio latency still needs a fresh human test.
 Latest synthetic planner decisions returned in 11.6–13.5 seconds, excluding
 3.1–4.2 seconds of background cleanup; these are not full speech-to-audio timings.
 Other requests still have substantial planning latency. The old UI-only request form still uses local rules.
+
+The owner's “clear the timer” trace took 16.54 seconds from the final transcript
+fragment to commit, including 14.09 seconds planning. Deterministic replay now
+commits at +700 ms with zero planner calls. Learning is a constrained phrase-to-template
+cache, not arbitrary code generation or model training; see the
+[quick-action learning contract](docs/ASSISTANT.md#guarded-quick-action-repertoire).
+
+## Weather setup
+
+Open Weather in [the companion](http://localhost:8780/remote), then use **Your places**
+to search and select cities. Up to five are saved; the selected city persists. °F is
+the default, with a °C setting. No IP/GPS location is inferred. Say “show the weather”,
+“weather tomorrow”, “forecast this week”, or “weather in [saved city]”. Common requests
+use the cached local fast path; ambiguous/other phrasing keeps the planner.
+
+The provider is free for this non-commercial prototype; no weather API key is needed.
+Saved places refresh every ten minutes while the Mac server runs. Stale/offline data
+is labeled, and data older than six hours is hidden. This is model-based weather,
+not radar or a severe-weather warning service. [Weather design and data contract](docs/WEATHER.md).
+
+For an isolated **synthetic** rain design preview: `node scripts/preview-weather.mjs rain`
+then open http://localhost:8781/. This never changes real settings or starts voice.
+The `/art` page compares every weather state on black and on the forecast strip.
+See [artwork provenance and prompts](public/assets/weather/COLLECTION.md).
 
 ## Private-LAN preview
 

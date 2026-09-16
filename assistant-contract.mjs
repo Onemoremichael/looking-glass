@@ -1,11 +1,14 @@
+import {quickActionSchema} from './quick-actions.mjs';
+import {weatherView} from './weather.mjs';
 export const capabilities = {
-  available: ['get_time','show','start_timer','cancel_timer','add_todo','set_todo_done','remove_todo'],
-  limitations: ['Timer alerts are visual only; no audible alarms.', 'No weather provider, calendar account, web research, music, camera, purchases, messages or background jobs are connected.', 'Home/back returns home, not navigation history.', 'Only the first five to-dos are shown on the mirror; the companion shows all items.'],
+  available: ['get_time','get_weather','show','start_timer','cancel_timer','add_todo','set_todo_done','remove_todo'],
+  limitations: ['Timer alerts are visual only; no audible alarms.', 'Weather is Open-Meteo model data for saved locations only; no radar, severe-weather alerts, or automatic IP location. Set up places/units in companion.', 'No calendar account, web research, music, camera, purchases, messages or research jobs are connected.', 'Home/back returns home, not navigation history.', 'Only the first five to-dos are shown on the mirror; the companion shows all items.'],
 };
 const str = (maxLength=300) => ({type:'string',minLength:1,maxLength});
 const obj = properties => ({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 export const actionSchema = {anyOf:[
   obj({action:{enum:['get_time']}}),
+  obj({action:{enum:['get_weather']},period:{enum:['now','today','tomorrow','week']},locationId:{anyOf:[{type:'null'},str(100)]}}),
   obj({action:{enum:['show']},panel:{enum:['home','time','timers','todos','weather','calendar','tasks','saved']}}),
   obj({action:{enum:['start_timer']},seconds:{type:'integer',minimum:1,maximum:86400},label:str(80)}),
   obj({action:{enum:['cancel_timer','remove_todo']},id:str(100)}),
@@ -19,6 +22,8 @@ export const decisionSchema = obj({
   options:{type:'array',items:obj({id:str(60),label:str(100)}),maxItems:4},
   selectedOptionId:{anyOf:[{type:'null'},str(60)]},
 });
+// Provider output always includes a nomination; older local decisions remain valid.
+export const plannerDecisionSchema={...decisionSchema,properties:{...decisionSchema.properties,quickAction:quickActionSchema},required:[...decisionSchema.required,'quickAction']};
 // Validate this small schema subset locally as well as at the model boundary.
 export function matches(schema,value) {
   if(schema.anyOf)return schema.anyOf.some(s=>matches(s,value));
@@ -32,14 +37,14 @@ export function matches(schema,value) {
   return !!schema.enum;
 }
 export function validateDecision(d) {
-  if(!matches(decisionSchema,d))throw Error('Invalid assistant decision');
+  if(!matches(Object.hasOwn(d||{},'quickAction')?plannerDecisionSchema:decisionSchema,d))throw Error('Invalid assistant decision');
   if((d.status==='execute')!==!!d.actions.length)throw Error('Actions require execute status');
   if(d.status!=='clarify'&&d.options.length)throw Error('Options require clarification');
   if(new Set(d.options.map(o=>o.id)).size!==d.options.length)throw Error('Duplicate option IDs');
   return d;
 }
 
-export function presentation(state) {
+export function presentation(state,now=Date.now()) {
   return {
     revision:state.revision, panel:state.panel,
     assistantCard:state.assistant&&state.assistant.status!=='execute'?{status:state.assistant.status,message:state.assistant.message,options:state.assistant.options}:null,
@@ -48,7 +53,8 @@ export function presentation(state) {
     companion:{panel:state.panel,todos:state.panel==='todos'?state.todos:[],timers:state.panel==='timers'?state.timers:[],clock:true,
       tasks:state.panel==='tasks'?state.tasks:[],recipes:state.panel==='saved'?state.recipes:[],
       homeSummary:state.panel==='home'?{savedViews:state.recipes.length,requests:state.tasks.filter(t=>t.status!=='cancelled').length,backgroundResearch:false}:null},
-    disconnectedPlaceholder:['weather','calendar'].includes(state.panel)?state.panel:null,
+    weather:state.panel==='weather'?{...weatherView(state.weather,now),view:state.weather?.view||'now'}:null,
+    disconnectedPlaceholder:state.panel==='calendar'?'calendar':null,
     clarification:state.assistant?.status==='clarify'?state.assistant:null,
   };
 }
