@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {learnWorkflowExecutor,workflowExecutor} from './workflow-reuse.mjs';
 
 const str=n=>({type:'string',minLength:1,maxLength:n});
 const obj=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
@@ -149,10 +150,15 @@ export class Workflows {
       this.update(id,r=>{const s=r.steps.find(s=>s.id===step.id);s.status='running';s.operationId ||= 'workflow-'+randomUUID();s.attempt++;r.detail='Working on '+s.title+'.';});
       const current=structuredClone(this.get(id)),item=current.steps.find(s=>s.id===step.id);
       const existingJob=(this.session.state.imageJobs||[]).find(j=>j.requestId===item.operationId);
-      const result=item.receipt||(existingJob?{jobId:existingJob.id,status:'completed'}:await this.assistant.execute(item.operationId,item.reply||item.request,{
+      const executor=this.session.learnQuickActions&&this.assistant.functions?workflowExecutor(current,current.steps.findIndex(s=>s.id===item.id),this.session.state):null;
+      let reuseTrace;
+      if(executor&&!item.receipt&&!existingJob)try{reuseTrace=this.telemetry?.start('workflow.step_reuse',{source:'learned'},active.trace);}catch{}
+      let result;
+      try{result=item.receipt||(existingJob?{jobId:existingJob.id,status:'completed'}:executor?await this.assistant.functions.handle(item.operationId,executor,{signal,utterance:item.request}):await this.assistant.execute(item.operationId,item.reply||item.request,{
         signal,trace:active.trace,workflowContext:{outcome:current.outcome,steps:current.steps,currentStepId:item.id,inputs:current.values},
         guardDecision:d=>guardWorkflowDecision(item.kind,d),
-      }));
+      }));reuseTrace?.end({outcome:result.status});}
+      catch(error){reuseTrace?.end({outcome:signal.aborted?'cancelled':'error'});throw error;}
       if(signal.aborted)return;
       let evidence;
       if(result.jobId){
@@ -174,7 +180,15 @@ export class Workflows {
         if(item.kind==='custom'){if(!result.functionVerified)evidence=null;else evidence.functionOutput=result.functionOutput;}
       }
       this.update(id,r=>{const s=r.steps.find(s=>s.id===item.id);s.evidence=evidence||null;s.options=result.options||[];
+        s.execution=item.receipt?'receipt':executor?'saved_function':'assistant';
         s.status=evidence?'completed':result.status==='needs_input'?'needs_input':'blocked';s.response=result.message||'';s.detail=evidence?'Finished and saved.':result.status==='needs_input'?(result.question||result.message):result.weatherAvailable===false?'The requested forecast is unavailable, stale or incomplete. This step is not finished.':'No verified result was produced. Review this step before explicitly retrying or adapting the plan.';
+        if(evidence&&this.session.learnQuickActions){
+          const route=learnWorkflowExecutor(r,r.steps.indexOf(s),this.session.state),recipe=this.session.state.reusableViews.find(v=>v.id===r.recipeId);
+          if(route&&recipe){
+            const existing=recipe.executors||[];
+            if(!existing.some(e=>JSON.stringify(e)===JSON.stringify(route)))recipe.executors=[...existing,route].slice(-32);
+          }
+        }
         if(!evidence){r.status=s.status;r.detail=s.detail;}
       });
       if(!evidence)return;

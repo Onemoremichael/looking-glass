@@ -121,7 +121,10 @@ export class CustomFunctions{
         }
         s.panel='functions';s.assistant=null;s.viewOffer=null;s.message='';
         s.assistantHistory=[...(s.assistantHistory||[]),{user:utterance,assistant:result.message,outcome:spec?.outcome||'View result',status:result.status==='needs_input'?'clarify':'execute'}].slice(-8);
-        for(const r of s.workflows||[])for(const step of r.steps)if(step.operationId===requestId)step.receipt=structuredClone(result);
+        for(const r of s.workflows||[])for(const step of r.steps)if(step.operationId===requestId){
+          step.receipt=structuredClone(result);
+          if(output)step.receipt.workflowFunction={action:'run_function',viewId:saved.id,inputJSON:JSON.stringify(input)};
+        }
         s.assistantReceipts=[...(s.assistantReceipts||[]),{id:requestId,result}].slice(-500);s.revision++;this.session.save();
       }catch(e){this.session.state=before;throw e;}
       this.session.onChange(s);return result;

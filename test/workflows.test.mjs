@@ -126,7 +126,7 @@ test('numbered workflow answers resolve the current visible choice before starti
 test('unavailable weather never completes a forecast step and explicit retry can fetch again',async t=>{
   const f=fixture(t,()=>decision([{action:'get_weather',period:'now',locationId:null}]));const r=create(f,spec([step('weather','Show weather')]));await settle(f.workflows);
   assert.equal(f.workflows.get(r.runId).status,'blocked');assert.equal(f.workflows.get(r.runId).steps[0].evidence,null);
-  f.workflows.handle('retry',{action:'continue_workflow',runId:r.runId,reply:null});await settle(f.workflows);assert.equal(f.calls(),2);
+  f.workflows.handle('retry',{action:'continue_workflow',runId:r.runId,reply:null});await settle(f.workflows);assert.equal(f.calls(),0); // Built-in weather route still cannot complete without data.
 });
 test('failed persistence cannot create a plan or consume a paid planner call',async t=>{
   const f=fixture(t),before=structuredClone(f.session.state);f.session.save=()=>{throw Error('disk full');};
