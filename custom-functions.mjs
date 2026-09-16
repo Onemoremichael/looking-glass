@@ -20,6 +20,9 @@ const validKey=k=>typeof k==='string'&&/^[a-z][a-zA-Z0-9_]{0,31}$/.test(k)&&!['c
 const exact=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const text=(v,n,empty=false)=>typeof v==='string'&&(empty||v.trim().length>0)&&v.length<=n;
 const number=v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1e9;
+export class FunctionCheckError extends Error{
+  constructor(message,diagnostic){super(message);this.code='function_check_failed';this.diagnostic=diagnostic;}
+}
 function parse(text,limit){if(typeof text!=='string'||Buffer.byteLength(text)>limit)throw Error('Function JSON exceeds limit');try{return JSON.parse(text);}catch{throw Error('Invalid function JSON');}}
 export function validateFunctionSpec(s){
   if(!exact(s,['title','outcome','inputs','code','tests','layout'])||!text(s.title,60)||!text(s.outcome,240)||!text(s.code,6000)||!Array.isArray(s.inputs)||s.inputs.length>6||!Array.isArray(s.tests)||s.tests.length<2||s.tests.length>5)throw Error('Invalid function specification');
@@ -56,7 +59,7 @@ export function evaluateFunction(code,inputs,{signal,timeoutMs=2500}={}){
     const abort=()=>finish(Error('Function cancelled'));
     const timer=setTimeout(()=>finish(Error('Function exceeded its execution limit')),timeoutMs);
     signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
-    worker.on('message',m=>m?.ok&&Array.isArray(m.results)?finish(null,m.results):finish(Error('Function sandbox rejected execution')));
+    worker.on('message',m=>m?.ok&&Array.isArray(m.results)?finish(null,m.results):finish(new FunctionCheckError('Function sandbox rejected execution',{check:'runtime_rejected'})));
     worker.on('error',()=>finish(Error('Function sandbox failed')));
     worker.on('exit',()=>finish(Error('Function sandbox stopped before completion')));
   });
@@ -92,8 +95,10 @@ export class CustomFunctions{
         const cases=spec.tests.map(t=>functionInput(spec,t.inputJSON));
         const results=await this.evaluate(spec.code,[...cases,input,input],{signal:controller.signal});
         if(results.length!==cases.length+2)throw Error('Function returned incomplete test results');
-        for(let i=0;i<results.length;i++)validateFunctionOutput(results[i],spec.layout);
-        for(let i=0;i<cases.length;i++)if(!isDeepStrictEqual(results[i],parse(spec.tests[i].expectedJSON,12000)))throw Error('Function example test failed');
+        for(let i=0;i<results.length;i++)try{validateFunctionOutput(results[i],spec.layout);}catch{
+          throw new FunctionCheckError('Function output does not match its layout',{check:'output_contract',caseIndex:i<cases.length?i:null});
+        }
+        for(let i=0;i<cases.length;i++)if(!isDeepStrictEqual(results[i],parse(spec.tests[i].expectedJSON,12000)))throw new FunctionCheckError('Function example test failed',{check:'example_mismatch',caseIndex:i,actual:structuredClone(results[i])});
         if(!isDeepStrictEqual(results.at(-1),results.at(-2)))throw Error('Function result was not repeatable');
         output=results.at(-1);
       }

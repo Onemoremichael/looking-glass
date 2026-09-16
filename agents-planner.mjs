@@ -58,7 +58,7 @@ export class AgentsPlanner {
     const evidence=this.lastResearchEvidence={calls:[],citedUrls:[]};
     const timing={planningMs:null,readyMs:null,cleanupMs:null,totalMs:null};this.lastTiming=timing;
     const planning=this.telemetry?.start('agent.planning',{},trace);
-    const pureWorkflow=context.workflowContext?.steps.find(s=>s.id===context.workflowContext.currentStepId)?.kind==='custom';
+    const pureWorkflow=!!context.functionRepair||context.workflowContext?.steps.find(s=>s.id===context.workflowContext.currentStepId)?.kind==='custom';
     try {
       stream=await this.client.beta.agents.sessions.create({
         agent:{model:this.model,instructions:assistantInstructions+'\n'+studioInstructions+'\n'+workflowInstructions+'\n'+functionInstructions+'\nReturn a JSON object containing exactly one decision field matching the supplied schema. Execute decisions require actions and no options; clarification, answer and unsupported decisions have no actions. Creating a plan with missing inputs is an execute decision: the saved plan itself will ask its input questions.',reasoning:{effort:this.effort},tools:pureWorkflow?[]:[{type:'web_search',mode:'live',context_size:'medium'}],multi_agent:{enabled:false},text:{format:{type:'json_schema',schema:plannerResponseSchema},verbosity:'low'}},
