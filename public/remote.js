@@ -16,6 +16,7 @@
 if(state.panel==='home')html='<div class="grid"><article><span class="tag">WORKING LOCALLY</span><h3>Everyday essentials</h3><p>Time, persistent timers, and a simple to-do list.</p></article><article><span class="tag">YOUR CAPABILITY LIBRARY</span><h3>'+savedCount+' saved views</h3><p>Keep the structure. Refresh the facts. Fork a view when your needs change.</p></article><article><span class="tag">HONEST STATUS</span><h3>'+state.tasks.filter(function(t){return t.status!=='cancelled';}).length+' requests</h3><p>Clarify first. See what is blocked. No background research is running.</p></article><article><span class="tag">OUTCOME-FIRST VOICE</span><h3>Speak, then see it</h3><p>Ask naturally. The agent can act, clarify with shared options, or explain a limitation. Read-only web research is available by voice.</p></article></div>';
     if(state.panel==='time')html='<p class="empty">Time shown above follows this device’s clock and time zone.</p>';
     if(state.panel==='weather')html='<div id="weather-content">'+window.GlassWeather.render(state.weather)+'</div>';
+    if(state.panel==='playroom')html=window.GlassPlayroom.render(state.playroom);
     if(state.panel==='research')html=window.GlassResearch.render(state.research,true);
     if(state.panel==='calendar')html='<article><span class="tag">NOT CONNECTED</span><h2>A clear view of your day.</h2><p>Connect a calendar explicitly before we can review events. No account access has been requested.</p></article>';
     if(state.panel==='timers'){
@@ -53,7 +54,7 @@ if(state.panel==='home')html='<div class="grid"><article><span class="tag">WORKI
   });
   document.getElementById('gators').onclick=function(){send({action:'request',text:'UF Gator sports events this week'});};
   window.GlassSurface.subscribe({
-    voice:function(value){window.dispatchEvent(new CustomEvent('glass-voice',{detail:value}));},
+    voice:function(value){window.GlassPlayroom.voice(value);window.dispatchEvent(new CustomEvent('glass-voice',{detail:value}));},
     wake:function(value){window.dispatchEvent(new CustomEvent('glass-wake',{detail:value}));},
     state:function(value){state=value;render();document.getElementById('connection').textContent='Local display connected · camera off';},
     error:function(){document.getElementById('connection').textContent='Disconnected. Reconnecting; displayed state may be stale.';}

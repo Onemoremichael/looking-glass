@@ -13,8 +13,9 @@
   }
   function esc(s){return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function render(state){
-    lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':state.panel==='research'?' research-open':'');
+    lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':state.panel==='research'?' research-open':state.panel==='playroom'?' playroom-open':'');
     var html='';
+    if(state.panel==='playroom')html=window.GlassPlayroom.render(state.playroom);
     if(state.panel==='research')html=window.GlassResearch.render(state.research,false);
     if(state.panel==='weather')html='<div id="weather-content">'+window.GlassWeather.render(state.weather)+'</div>';
     if(state.panel==='calendar')html='<article><span class="tag">NOT CONNECTED</span><h2>Calendar</h2><p>Set up this connection from your companion.</p></article>';
@@ -33,6 +34,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-end]'),function(el){var s=Math.max(0,Math.ceil((Number(el.getAttribute('data-end'))-Date.now())/1000));el.textContent=s?Math.floor(s/60)+':'+('0'+s%60).slice(-2):'Time’s up';});
   }
   window.GlassSurface.subscribe({voice:function(state){
+    if(window.GlassPlayroom)window.GlassPlayroom.voice(state);
     var indicator=document.getElementById('mirror-voice');
     // Native audio has its own level-reactive indicator; retain actionable web status.
     var nativeRoutine=state.device==='mirror'&&['listening','speaking','muted'].indexOf(state.phase)!==-1;

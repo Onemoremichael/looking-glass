@@ -60,6 +60,19 @@ test('USB loss ends native capture and finalizes the paid session',async t=>{
 test('missing Mirror fails before paid session creation',async t=>{
   const f=fixture(t);f.mirror.status=()=>({connected:false});await assert.rejects(()=>f.voice.start(null,f.mirror),/not connected/);assert.equal(f.voice.active,null);
 });
+test('adult playroom voice uses isolated instructions, suppresses transcripts and reacts to real audio',async t=>{
+  const f=fixture(t);f.voice.session.startPlayroom('bear');let logged=0;
+  f.voice.telemetry={start:()=>({event(){},end(){}}),transcript(){logged++;}};
+  await f.voice.start(null,f.mirror);const p=f.primary();
+  assert.match(p.sent[0].session.instructions,/pretend bear/);assert.match(p.sent[0].session.instructions,/Current game state/);
+  assert.doesNotMatch(p.sent[0].session.instructions,/Open-Meteo/);
+  p.emit('event',{type:'session.input_transcript.delta',delta:'private rehearsal answer'});
+  p.emit('event',{type:'session.output_transcript.delta',delta:'private rehearsal reply'});
+  assert.equal(logged,0);
+  const audio=Buffer.alloc(640);audio.writeInt16LE(1000,0);
+  p.emit('event',{type:'session.output_audio.delta',delta:audio.toString('base64')});
+  assert.equal(f.voice.state.phase,'speaking');await f.voice.stop();assert.equal(f.voice.active,null);
+});
 test('wake-owned Live session has no browser lease; standalone spoken end closes with final usage',async t=>{
   const f=fixture(t);await f.voice.start(null,f.mirror,{owner:'wake'});
   assert.match(f.primary().sent[0].session.instructions,/opened by local Hey Mirror/);

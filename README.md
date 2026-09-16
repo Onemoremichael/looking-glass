@@ -59,6 +59,10 @@ connection still shows a stale-data warning.
   re-runs the query rather than pretending old facts are current. See [research](docs/RESEARCH.md).
 - Save configured requests as recipes; fork preferences without modifying originals.
 - Shared live updates and reconnect status.
+- Adult-only playroom rehearsal: four illustrated animal cards and a bounded Pip
+  bear adventure, with local game state and isolated voice instructions. Physical
+  spoken gameplay is not yet verified; this is not ready for children. See
+  [implementation, privacy gates and test evidence](docs/PLAYROOM.md).
 - GPT-Live-1 WebRTC adapter with Mac mic/speakers, Start/End/Mute, server-side tools,
   three-minute session cap and disconnect watchdog. Owner confirmed the first spoken test worked.
 - Agents API outcome planning for natural-language timer, to-do and display requests:
@@ -124,7 +128,7 @@ uses the separate Open-Meteo adapter; calendar and camera are not connected.
 Typed prototype requests still use limited local rules—not language-model reasoning.
 Saved research recipes are configurations; their timestamped result cache is separate.
 No automatic or scheduled work runs. The broader build is tracked in
-[the ambitious-pass ledger](docs/AMBITIOUS-PASS.md), including pending games,
+[the ambitious-pass ledger](docs/AMBITIOUS-PASS.md), including experimental games,
 image capabilities and custom workflow construction.
 The old enchanted-face direction has been replaced by this practical foundation.
 

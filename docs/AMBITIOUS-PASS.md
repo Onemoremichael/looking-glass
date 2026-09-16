@@ -14,9 +14,13 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    pagination. Final hardware fit and broader semantic reuse remain follow-up.
 2. **Creative studio** — pending: current GPT Image model, bounded paid jobs,
    persisted assets and reusable creative recipes, generated game artwork.
-3. **Playroom** — pending: animal deck, speech answer judgment with uncertainty,
-   correct/retry/skip/next state, animated bear persona, adult-controlled mode and
-   child-appropriate privacy. Gates include actual multi-turn simulated audio.
+3. **Playroom** — adult-rehearsal foundation implemented: four generated animal
+   assets, conservative answer judgment with uncertainty, retry/hint/skip state,
+   bounded bear choices and audio-reactive animation. Hardware animal display was
+   inspected; the first physical spoken answer did not advance. Full multi-turn
+   audio, child-speech coverage and provider privacy requirements remain gates.
+   See [evidence and limitations](PLAYROOM.md). Generated artwork is not completion
+   of the application's image-generation API integration.
 4. **Adaptable workflows** — pending: durable multi-step task progress, resume,
    refinement and cancellation; reusable parameterized flows; sandboxed custom
    UX/code creation with validation and promotion, not arbitrary host execution.

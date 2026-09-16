@@ -3,6 +3,7 @@ import {quickPhrase} from './quick-actions.mjs';
 import {weatherView} from './weather.mjs';
 import {savedViewIntent,viewOfferCurrent} from './weather-composition.mjs';
 import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
+import {gameIntent} from './playroom.mjs';
 export class Assistant {
   constructor({session,planner,surfaces,telemetry,weather}){Object.assign(this,{session,planner,surfaces,telemetry,weather});this.inflight=new Map();}
   execute(id,utterance,{signal,trace,onProgress=()=>{},beforeCommit=async()=>{}}={}) {
@@ -12,6 +13,11 @@ export class Assistant {
   }
   async run(id,utterance,{signal,trace,onProgress,beforeCommit}) {
     if(typeof utterance!=='string'||!utterance.trim()||utterance.length>4000)return {status:'needs_input',message:'I did not catch a request. Please say it again.'};
+    if(this.session.state.playroom){
+      const revision=this.session.state.revision,action=gameIntent(utterance,this.session.state);
+      await beforeCommit();if(signal?.aborted)throw Error('Request cancelled');
+      return this.session.commitDecision(id,revision,{status:'execute',outcome:'Continue game',message:'Game answer',actions:[action],options:[],selectedOptionId:null},'');
+    }
     let researchRequest=null;
     let quick=researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
     if(quick?.action==='open_research_view'){

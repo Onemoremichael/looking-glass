@@ -17,6 +17,8 @@ const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surf
 const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png' };
 Object.assign(files,{'/weather-ui.js':'weather-ui.js','/weather.css':'weather.css','/weather-controls.js':'weather-controls.js'});
 Object.assign(files,{'/research-ui.js':'research-ui.js','/research.css':'research.css'});
+Object.assign(files,{'/playroom-ui.js':'playroom-ui.js','/playroom.css':'playroom.css','/playroom-controls.js':'playroom-controls.js'});
+for(const name of ['elephant','giraffe','penguin','bear'])files['/assets/playroom/'+name+'-v1.png']='assets/playroom/'+name+'-v1.png';
 for(const kind of ['cloud','sun','moon','rain','storm','snow','fog']){
   files['/assets/weather/'+kind+'-volume-v1.png']='assets/weather/'+kind+'-volume-v1.png';
 }
@@ -118,6 +120,19 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
         try { command = JSON.parse(body); session.command(command.action, command); }
         catch { return json(400, { error: 'Invalid command' }); }
         return json(200, session.state);
+      }
+      if(req.method==='POST'&&path==='/api/playroom'){
+        if(req.headers.origin!==localOrigin||!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(403,{error:'Same-origin JSON required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>512)return json(413,{error:'Request too large'});}
+        try{
+          const body=JSON.parse(raw);
+          if(body.action==='stop'){await wake.disable();await voice.stop();session.endPlayroom();}
+          else if(body.action==='start'&&body.adultRehearsal===true){
+            if(voice.active||wake.state.enabled)throw Error('End voice and wake listening before entering rehearsal');
+            session.startPlayroom(body.kind);
+          }else throw Error('Adult-only rehearsal must be acknowledged; child deployment is not enabled');
+          return json(200,{ok:true});
+        }catch(e){return json(409,{error:e.message});}
       }
       if (req.method === 'GET' && files[path]) {
         const name = files[path];
