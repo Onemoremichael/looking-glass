@@ -59,6 +59,10 @@ connection still shows a stale-data warning.
   re-runs the query rather than pretending old facts are current. See [research](docs/RESEARCH.md).
 - Save configured requests as recipes; fork preferences without modifying originals.
 - Shared live updates and reconnect status.
+- Image studio: asynchronous GPT Image 2.5 Sunburst adapter, progress, cancellation,
+  persistent artwork/recipes and free local reopening. Provider access is still
+  unverified; offline tests and physical-mirror fixture rendering pass. See
+  [image workflow, budget accounting and limits](docs/IMAGE-STUDIO.md).
 - Adult-only playroom rehearsal: four illustrated animal cards and a bounded Pip
   bear adventure, with local game state and isolated voice instructions. Physical
   spoken gameplay is not yet verified; this is not ready for children. See

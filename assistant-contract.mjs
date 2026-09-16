@@ -4,13 +4,15 @@ import {weatherComponents,weatherRanges} from './weather-composition.mjs';
 import {researchBoardSchema,researchView} from './research-board.mjs';
 import {gameView} from './playroom.mjs';
 export const capabilities = {
-  available: ['get_time','get_weather','compose_weather','open_weather_view','compose_research','open_research_view','research_page','save_current_view','resolve_view_offer','show','start_timer','cancel_timer','add_todo','set_todo_done','remove_todo'],
+  available: ['generate_image','open_image','cancel_image','get_time','get_weather','compose_weather','open_weather_view','compose_research','open_research_view','research_page','save_current_view','resolve_view_offer','show','start_timer','cancel_timer','add_todo','set_todo_done','remove_todo'],
   limitations: ['Timer alerts are visual only; no audible alarms.', 'Weather is Open-Meteo model data for saved locations only; no radar, severe-weather alerts, or automatic IP location. Set up places/units in companion.', 'No calendar account, music, camera, purchases or messages are connected. Web research is read-only, on demand, and limited to six displayed cards; no autonomous scheduled research.', 'Home/back returns home, not navigation history.', 'Only the first five to-dos are shown on the mirror; the companion shows all items.'],
 };
 const str = (maxLength=300) => ({type:'string',minLength:1,maxLength});
 const obj = properties => ({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 export const weatherSpecSchema=obj({title:str(60),range:{enum:weatherRanges},startDate:{anyOf:[{type:'null'},str(10)]},endDate:{anyOf:[{type:'null'},str(10)]},focus:{enum:['general','rain','temperature']},components:{type:'array',items:{enum:weatherComponents},maxItems:3}});
 export const actionSchema = {anyOf:[
+  obj({action:{enum:['generate_image']},spec:obj({title:str(80),prompt:str(1200),background:{enum:['transparent','opaque']}})}),
+  obj({action:{enum:['open_image','cancel_image']},jobId:str(100)}),
   obj({action:{enum:['playroom_turn']},gameId:str(100),turn:{type:'integer',minimum:0,maximum:10000},text:str(4000)}),
   obj({action:{enum:['compose_research']},board:researchBoardSchema}),
   obj({action:{enum:['open_research_view']},viewId:str(100),refresh:{type:'boolean'}}),
@@ -21,7 +23,7 @@ export const actionSchema = {anyOf:[
   obj({action:{enum:['open_weather_view']},viewId:str(100)}),
   obj({action:{enum:['resolve_view_offer']},offerId:str(100),choice:{enum:['save','discard']}}),
   obj({action:{enum:['save_current_view']}}),
-  obj({action:{enum:['show']},panel:{enum:['home','time','timers','todos','weather','research','calendar','tasks','saved']}}),
+  obj({action:{enum:['show']},panel:{enum:['home','time','timers','todos','weather','research','studio','calendar','tasks','saved']}}),
   obj({action:{enum:['start_timer']},seconds:{type:'integer',minimum:1,maximum:86400},label:str(80)}),
   obj({action:{enum:['cancel_timer','remove_todo']},id:str(100)}),
   obj({action:{enum:['add_todo']},text:str()}),
@@ -59,6 +61,7 @@ export function validateDecision(d) {
 export function presentation(state,now=Date.now()) {
   return {
     revision:state.revision, panel:state.panel,
+    artwork:state.panel==='studio'?(state.imageJobs||[]).find(j=>j.id===state.imageJobId)||null:null,
     playroom:gameView(state.playroom),
     assistantCard:state.assistant&&state.assistant.status!=='execute'?{status:state.assistant.status,message:state.assistant.message,options:state.assistant.options}:null,
     mirror:{panel:state.panel,todos:state.panel==='todos'?state.todos.slice(0,5):[],timers:state.timers,clock:true,

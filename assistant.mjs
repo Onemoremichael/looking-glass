@@ -4,8 +4,9 @@ import {weatherView} from './weather.mjs';
 import {savedViewIntent,viewOfferCurrent} from './weather-composition.mjs';
 import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {gameIntent} from './playroom.mjs';
+import {imageIntent} from './image-studio.mjs';
 export class Assistant {
-  constructor({session,planner,surfaces,telemetry,weather}){Object.assign(this,{session,planner,surfaces,telemetry,weather});this.inflight=new Map();}
+  constructor({session,planner,surfaces,telemetry,weather,studio}){Object.assign(this,{session,planner,surfaces,telemetry,weather,studio});this.inflight=new Map();}
   execute(id,utterance,{signal,trace,onProgress=()=>{},beforeCommit=async()=>{}}={}) {
     const prior=(this.session.state.assistantReceipts||[]).find(r=>r.id===id);if(prior)return Promise.resolve(prior.result);
     if(this.inflight.has(id))return this.inflight.get(id);
@@ -19,7 +20,7 @@ export class Assistant {
       return this.session.commitDecision(id,revision,{status:'execute',outcome:'Continue game',message:'Game answer',actions:[action],options:[],selectedOptionId:null},'');
     }
     let researchRequest=null;
-    let quick=researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
+    let quick=imageIntent(utterance,this.session.state)||researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
     if(quick?.action==='open_research_view'){
       const cached=this.session.state.researchCache?.find(b=>b.savedId===quick.viewId);
       if(quick.refresh||!cached||this.session.now()-cached.fetchedAt>=RESEARCH_FRESH_MS){
@@ -65,6 +66,7 @@ export class Assistant {
         viewOffer:viewOfferCurrent(state,this.session.now())?state.viewOffer:null,
         weatherViews:state.weatherViews||[],
         reusableViews:state.reusableViews||[],researchRequest,research:state.research||null,
+        imageJobs:state.imageJobs||[],imageStudio:{available:!!this.studio,asynchronous:true,autoSave:true,editsSupported:false},
         researchCache:(state.researchCache||[]).map(b=>({viewId:b.savedId,fresh:this.session.now()-b.fetchedAt<RESEARCH_FRESH_MS})),
         durability:{autoSave:true,supportedKinds:['weather','research'],stores:'validated configuration, not data or action replays'},
         presentation:view,surfaces:reports,history:state.assistantHistory||[],resolvedSelection,
@@ -90,6 +92,13 @@ export class Assistant {
       }
       await beforeCommit();
       if(signal?.aborted)throw Error('Request cancelled');
+      if(decision.actions.some(a=>['generate_image','cancel_image'].includes(a.action))){
+        if(decision.actions.length!==1||!this.studio)throw Error('Use one image operation at a time');
+        if(this.session.state.revision!==revision)throw Error('Display changed while deciding');
+        const action=decision.actions[0];
+        const result=action.action==='generate_image'?this.studio.start(id,action.spec,{revision}):this.studio.cancel(action.jobId);
+        span?.end({outcome:'completed',action:'assistant'});return result;
+      }
       const result=this.session.commitDecision(id,revision,decision,utterance);
       if(result.compositionId){
         onProgress({stage:'presenting',reusable:false});
