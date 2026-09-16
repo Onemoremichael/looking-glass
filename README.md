@@ -87,7 +87,8 @@ connection still shows a stale-data warning.
   bear adventure, with local game state, isolated voice instructions and opt-in
   Mac-local recognition/synthesis using the Mirror microphone and speakers. Run
   `npm run wake:setup` then `npm run playroom:setup` to install local speech. Physical
-  spoken gameplay is not yet verified; this is not ready for children. See
+  bear play completes with spoken option numbers; animal-name recognition is still
+  unreliable, and this is not ready for children. See
   [implementation, privacy gates and test evidence](docs/PLAYROOM.md).
 - GPT-Live-1 WebRTC adapter with Mac mic/speakers, Start/End/Mute, server-side tools,
   three-minute session cap and disconnect watchdog. Owner confirmed the first spoken test worked.

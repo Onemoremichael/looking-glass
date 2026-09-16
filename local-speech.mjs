@@ -49,9 +49,10 @@ export function wavePCM(wav){
 }
 // Only fixed game-engine prompts go into synthesis. Files contain generated
 // speech, never mic input. Temporary files are removed on success and failure.
-export async function synthesizeGameSpeech(text,{signal}={}){
+export async function synthesizeGameSpeech(text,{signal,voice='Samantha'}={}){
   if(typeof text!=='string'||!text.trim()||text.length>1000)throw Error('Invalid local speech');
+  if(!['Samantha','Daniel'].includes(voice))throw Error('Unsupported local voice');
   const directory=await mkdtemp(join(tmpdir(),'glass-game-tts-'));
-  try{const path=join(directory,'prompt.wav');await exec('/usr/bin/say',['-v','Samantha','-r','150','--file-format=WAVE','--data-format=LEI16@16000','-o',path,text],{signal,timeout:15000,env:{PATH:'/usr/bin:/bin'},maxBuffer:4096});return wavePCM(await readFile(path));}
+  try{const path=join(directory,'prompt.wav');await exec('/usr/bin/say',['-v',voice,'-r','150','--file-format=WAVE','--data-format=LEI16@16000','-o',path,text],{signal,timeout:15000,env:{PATH:'/usr/bin:/bin'},maxBuffer:4096});return wavePCM(await readFile(path));}
   finally{await rm(directory,{recursive:true,force:true});}
 }

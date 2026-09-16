@@ -47,7 +47,7 @@ export function advanceGame(game,text){
       game.feedback=correct?'correct':'revealed';if(correct)game.found++;
       game.index++;
       game.prompt=(correct?'Yes! An animal friend: ':'That one is a ')+card.name+'. ';
-      if(game.index>=animals.length){game.phase='complete';game.prompt+='We met all four animals! Thanks for playing. You can say play again.';}
+      if(game.index>=animals.length){game.phase='complete';game.prompt+='We met all four animals! Thanks for playing. Ask your grown-up when you want to play again.';}
       else game.prompt+='Here’s the next one. What animal do you see?';
     }else if(/^(?:hint|a hint|help|help me|give me a hint)$/.test(s)){
       game.feedback='hint';game.prompt=card.hint+' What animal could it be?';
@@ -69,7 +69,7 @@ export function advanceGame(game,text){
   if(game.index<choices.length){game.options=choices[game.index].options;game.prompt='Ooh, '+selected+'! '+choices[game.index].prompt;}
   else{
     const [place,prop,sound]=game.choices;game.options=[];game.phase='complete';
-    game.prompt='In our pretend '+place+' adventure, Pip brought a '+prop+' and gave a little '+sound+'! What a silly adventure. Want to play again?';
+    game.prompt='In our pretend '+place+' adventure, Pip brought a '+prop+' and gave a little '+sound+'! What a silly adventure. Ask your grown-up when you want to play again.';
   }
   return game;
 }

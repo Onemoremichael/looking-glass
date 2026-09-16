@@ -47,6 +47,15 @@ test('local game handles hints, known wrong answers, bear choices and explicit s
   await local.answer(local.active,'hint');assert.equal(session.state.playroom.feedback,'hint');
   await local.answer(local.active,'stop');assert.equal(local.active,null);
 });
+test('answer-shaped unclear speech asks for a retry without grading; negation stays ignored',async t=>{
+  const {session,local}=fixture(t);await local.start();await flush();
+  await local.answer(local.active,'a pendwin');
+  assert.equal(session.state.playroom.feedback,'uncertain');assert.equal(session.state.playroom.index,0);
+  assert.equal(session.state.playroom.found,0);assert.match(session.state.playroom.prompt,/didn’t quite catch/);
+  const turn=session.state.playroom.turn;
+  for(const text of ['it is not an elephant','an elephant or giraffe','my wife says elephant'])await local.answer(local.active,text);
+  assert.equal(session.state.playroom.turn,turn);assert.equal(local.state.ignored,3);
+});
 test('stopping during model startup prevents subsequent capture',async t=>{
   let ready;const recognizer=new Recognizer();recognizer.start=()=>new Promise(r=>ready=r);
   const {local,mirror}=fixture(t,{recognizerFactory:()=>recognizer});const starting=local.start();
