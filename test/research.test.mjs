@@ -57,7 +57,7 @@ test('provider accepts only research sources opened in completed search events',
     const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){
       yield {type:'agent.session.created',session:{id:'test'}};
       if(opened)yield {type:'agent.session.turn.item.done',item:{type:'web_search_call',status:'completed',action:{type:'open_page',url:board().sources[0].url}}};
-      yield {type:'agent.session.turn.output_text.done',text:JSON.stringify(decision(board()))};yield {type:'agent.session.turn.completed'};
+      yield {type:'agent.session.turn.output_text.done',text:JSON.stringify({decision:decision(board())})};yield {type:'agent.session.turn.completed'};
     }};
     const p=new AgentsPlanner({client:{beta:{agents:{sessions:{create:async()=>stream,delete:async()=>{}}}}},budget:{reserve:()=>1,finishAgent(){}}});
     if(opened)assert.equal((await p.decide({})).actions[0].action,'compose_research');
@@ -70,7 +70,7 @@ test('URL-less search events require independent verification and fail closed',a
     const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){
       yield {type:'agent.session.created',session:{id:'test'}};
       yield {type:'agent.session.turn.item.done',item:{type:'web_search_call',status:'completed',action:{type:'other'}}};
-      yield {type:'agent.session.turn.output_text.done',text:JSON.stringify(decision(board()))};
+      yield {type:'agent.session.turn.output_text.done',text:JSON.stringify({decision:decision(board())})};
       yield {type:'agent.session.turn.completed'};
     }};
     let checks=0;

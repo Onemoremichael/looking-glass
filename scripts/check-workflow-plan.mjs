@@ -25,4 +25,7 @@ try{
   const passed=!!run&&run.status==='needs_input'&&run.inputQuestions.length===1&&run.steps.length===3&&run.steps.every(s=>s.kind==='confirm'&&s.status==='pending')&&session.state.reusableViews.some(v=>v.id===run.recipeId&&v.kind==='workflow');
   console.log(JSON.stringify({passed,plannerCalls:calls,result,run,directory},null,2));
   if(!passed)process.exitCode=1;
+}catch(error){
+  console.log(JSON.stringify({passed:false,plannerCalls:calls,directory,errorCode:error.code==='planner_contract_invalid'?error.code:'smoke_failed',contract:planner.lastContractFailure||null},null,2));
+  process.exitCode=1;
 }finally{await workflows.close();await planner.drain();await telemetry.close();}

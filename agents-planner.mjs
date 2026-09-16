@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { plannerDecisionSchema, validateDecision } from './assistant-contract.mjs';
+import { plannerResponseSchema, validatePlannerResponse } from './assistant-contract.mjs';
 import { assistantInstructions } from './prompts/assistant-instructions.mjs';
 import {studioInstructions} from './prompts/studio-instructions.mjs';
 import {workflowInstructions} from './prompts/workflow-instructions.mjs';
@@ -46,6 +46,7 @@ export class AgentsPlanner {
   }
   async runDecision(context,{signal,trace}={}) {
     const started=Date.now();let plannedAt;
+    this.lastContractFailure=null;
     this.client ||= new OpenAI({maxRetries:0,timeout:15000});
     await this.recover({signal,trace});
     if(signal?.aborted)throw Error('Request cancelled');
@@ -58,7 +59,7 @@ export class AgentsPlanner {
     const planning=this.telemetry?.start('agent.planning',{},trace);
     try {
       stream=await this.client.beta.agents.sessions.create({
-        agent:{model:this.model,instructions:assistantInstructions+'\n'+studioInstructions+'\n'+workflowInstructions,reasoning:{effort:this.effort},tools:[{type:'web_search',mode:'live',context_size:'medium'}],multi_agent:{enabled:false},text:{format:{type:'json_schema',schema:plannerDecisionSchema},verbosity:'low'}},
+        agent:{model:this.model,instructions:assistantInstructions+'\n'+studioInstructions+'\n'+workflowInstructions+'\nReturn a JSON object containing exactly one decision field matching the supplied schema. Execute decisions require actions and no options; clarification, answer and unsupported decisions have no actions. Creating a plan with missing inputs is an execute decision: the saved plan itself will ask its input questions.',reasoning:{effort:this.effort},tools:[{type:'web_search',mode:'live',context_size:'medium'}],multi_agent:{enabled:false},text:{format:{type:'json_schema',schema:plannerResponseSchema},verbosity:'low'}},
         environment:{type:'none'},input:JSON.stringify(context),stream:true,
       },{signal:combined});
       for await(const event of stream) {
@@ -76,7 +77,7 @@ export class AgentsPlanner {
       }
       if(!complete||combined.aborted)throw Error('Agent decision interrupted');
       if(text.length>24000)throw Error('Agent decision too large');
-      const decision=validateDecision(JSON.parse(text));
+      const decision=validatePlannerResponse(JSON.parse(text));
       for(const a of decision.actions)if(a.action==='compose_research'){
         evidence.citedUrls=a.board.sources.map(s=>s.url);
         validateResearchBoard(a.board);
@@ -93,6 +94,7 @@ export class AgentsPlanner {
       accepted=true;timing.readyMs=Date.now()-started;
       return decision;
     } catch(error) {
+      if(error.code==='planner_contract_invalid')this.lastContractFailure=error.contract;
       rejected=!stream&&Number.isInteger(error.status)&&error.status>=400&&error.status<500;
       throw error;
     } finally {

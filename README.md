@@ -63,8 +63,9 @@ connection still shows a stale-data warning.
   research/weather/list/artwork execution, resumable questions, human confirmations,
   pause/cancel, and evidence-backed progress. Companion controls and a non-touch
   mirror progress view are implemented and tested offline. A live planning smoke
-  test was safely rejected for an inconsistent provider response; fixing that
-  contract and retesting remain prerequisites for live readiness. Custom code
+  test was safely rejected for an inconsistent provider response. The structured
+  contract is now hardened and regression-tested; a paid live retest remains a
+  prerequisite for live readiness. Custom code
   execution is not yet available. See [workflows](docs/WORKFLOWS.md).
 - Image studio: asynchronous GPT Image 2.5 Sunburst adapter, progress, cancellation,
   persistent artwork/recipes and free local reopening. Real telemetry integration
