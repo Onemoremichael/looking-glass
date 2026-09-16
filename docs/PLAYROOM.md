@@ -22,7 +22,22 @@ tests until provider retention requirements and the child-safety review are met.
 
 See [artwork prompts and provenance](PLAYROOM-ART.md).
 
-## Opt-in local audio (Mac + Mirror)
+## Primary voice: GPT-Live / Marin
+
+Choose a game with the adult rehearsal acknowledgment, then use **Start GPT-Live
+conversation** in the main voice controls. Both Mac and Mirror transports remain
+configured for `gpt-live-1` with `marin`. Starting a game alone never opens capture.
+GPT-Live is the intended expressive conversational experience, not macOS TTS.
+The current conservative API test allowance can block a new session; the app must
+not silently switch voices, reset the ledger, or increase that allowance.
+
+The companion now places the local mode below a collapsed **Local speech
+diagnostics · different voice** disclosure. Physical local-speech evidence below
+does **not** verify the GPT-Live game experience. No new paid voice test was run
+in the workflow-reuse pass. See the [official model description](https://developers.openai.com/api/docs/models/gpt-live-1)
+for GPT-Live's conversational role; local code owns the configured voice selection.
+
+## Opt-in local diagnostics (Mac + Mirror)
 
 Install with `npm run wake:setup` followed by `npm run playroom:setup`. The latter
 downloads Whisper `small.en` (about 606 MiB compressed) and Silero VAD from the
@@ -34,7 +49,7 @@ See the upstream [Whisper model instructions](https://k2-fsa.github.io/sherpa/on
 [VAD example](https://github.com/k2-fsa/sherpa-onnx/blob/master/python-api-examples/vad-microphone.py).
 
 In the Mac-local companion, acknowledge adult rehearsal, choose a game, then click
-**Start local game audio**. Stop other voice and wake modes first. This mode uses
+**Start local diagnostic voice** inside the diagnostics disclosure. Stop other voice and wake modes first. This mode uses
 Mirror PCM input, local Sherpa recognition and macOS Samantha synthesis; it makes
 no OpenAI requests. Microphone PCM and recognized text are processed in memory,
 not recorded or added to transcript telemetry. Temporary synthesized prompt WAVs

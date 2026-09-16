@@ -66,6 +66,11 @@ connection still shows a stale-data warning.
   test was safely rejected for an inconsistent provider response. The structured
   contract is now hardened and regression-tested; a paid live retest remains a
   prerequisite for live readiness. See [workflows](docs/WORKFLOWS.md).
+- Eligible workflow calculations now learn typed bindings after verified execution:
+  fresh runs can reuse the saved function with new named inputs, rerun its tests,
+  and assemble fresh output without another planning call. Code, prior evidence
+  and unbound input changes invalidate reuse. Built-in workflow weather requests
+  refresh data before their local route. Not all workflow steps are compiled.
 - Custom functions: bounded pure JavaScript calculations in isolated QuickJS,
   example-test gates, reusable recipes, and large metric/list/bar/note layouts.
   Companion inputs rerun saved functions locally; eligible workflow custom steps
@@ -84,8 +89,10 @@ connection still shows a stale-data warning.
   unverified; offline tests and physical-mirror fixture rendering pass. See
   [image workflow, budget accounting and limits](docs/IMAGE-STUDIO.md).
 - Adult-only playroom rehearsal: four illustrated animal cards and a bounded Pip
-  bear adventure, with local game state, isolated voice instructions and opt-in
-  Mac-local recognition/synthesis using the Mirror microphone and speakers. Run
+  bear adventure, with local game state and isolated GPT-Live/Marin voice instructions.
+  GPT-Live remains the intended primary conversational experience. Optional local
+  diagnostics use a different voice (Mac Samantha), not a replacement or automatic
+  fallback. Run
   `npm run wake:setup` then `npm run playroom:setup` to install local speech. Physical
   bear play completes with spoken option numbers; animal-name recognition is still
   unreliable, and this is not ready for children. See

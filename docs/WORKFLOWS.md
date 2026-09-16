@@ -80,10 +80,48 @@ flow can intentionally add new list items; it is not a replay of the old run.
 
 Recognized “show [title] workflow”, “resume this plan”, and “run [saved title]
 again” routes bypass plan creation. Ambiguous names or nuanced paraphrases go to
-the planner. Reuse currently saves the plan structure, not every step's inference:
-research/generation still have their own latency and charges. A future promotion
-layer can compile eligible successful steps into validated parameterized local
-executors; this pass does **not** claim arbitrary semantic requests are instant.
+the planner. Research/generation still have their own latency and charges. The
+promotion layer below now compiles eligible pure calculations; this does **not**
+make arbitrary semantic requests or every kind of step instant.
+
+### Learned calculation executors
+
+After a custom step commits a verified function result, the workflow can retain
+a typed executor in its recipe's `executors` array (bounded to 32). Function input
+names must match declared workflow inputs, the step request must explicitly use
+their `{{name}}` placeholders, and the first committed values must agree exactly
+after type conversion. Numbers, text and booleans are supported. Inferred constants,
+unmatched names, zero-input functions and steps with clarification replies do not
+promote. No arbitrary string replacement or fuzzy parameter guessing occurs.
+
+A fresh run binds new values, then calls the existing sandbox execution path. It
+reruns examples, repeatability and output validation and renders a new result;
+it does not replay the old output or ask the planner to regenerate the function.
+The recipe pins the full function specification, workflow specification, preceding
+evidence and any workflow inputs not bound into that function. Different prior
+answers, changed code/layout/tests, missing recipes or invalid values cause a miss
+and normal planning. Previous research/weather evidence is conservatively pinned,
+including its timestamp; refreshed evidence may require reasoning again. A sandbox
+failure after a match blocks the step instead of automatically spending on repair.
+
+Pure workflow planning receives only its run, inputs, prior evidence and function
+catalog, not ambient chat, current time or unrelated display/weather state. Its
+provider turn has no web-search tool. Live facts must come from an explicit prior
+research/weather step or supplied inputs, rather than becoming hidden dependencies.
+Example checks are not an independent proof of a generated calculation's correctness.
+
+The function binding is saved with the same receipt as the successful mutation.
+Progress and executor promotion save atomically; a later persistence failure can
+recover from that receipt without executing the calculation again. Restart still
+pauses work. `OPENAI_LEARNED_FAST_PATH=0` disables promotion and executor reuse.
+Companion completion evidence marks **reused locally**; `workflow.step_reuse`
+traces contain typed timing/outcome metadata, not inputs, code or results.
+
+Simple weather step requests also take the existing built-in weather intent route
+without a planner call, but call the normal forecast refresh service first. Its
+fresh-cache TTL still applies. Missing/stale/incomplete data cannot complete a step.
+List mutations, paid artwork jobs and research retrieval are not compiled by this
+layer; ordinary receipts still prevent duplicate execution within a run.
 
 ## Surfaces and access
 
@@ -104,8 +142,9 @@ Deterministic tests exercise tool-evidenced completion, parameter reuse, input
 validation, multi-turn questions, scope guards, restart/receipt recovery, late
 planning and image cancellation, retained research, numbered choices, unavailable
 weather, storage rollback, custom-capability blocking, idempotent routing, escaped
-rendering and HTTP authorization. The full suite has 200 passing tests, including
-18 workflow tests and seven provider-contract tests. Real local `workflow.run` spans group delegated step traces;
+rendering and HTTP authorization. The current full suite has 250 passing tests,
+including 18 workflow tests, 15 workflow-reuse/voice-disclosure tests and seven
+provider-contract tests. Real local `workflow.run` spans group delegated step traces;
 only typed counts, duration and outcomes enter telemetry, not plan text, inputs
 or research snapshots.
 
@@ -143,10 +182,21 @@ reservation requires additional budget approval. No automatic paid retry is made
 ```sh
 node scripts/preview-workflows.mjs
 # Isolated in-memory fixture, http://localhost:8784/; no API calls.
+node scripts/preview-workflow-reuse.mjs
+# Alternative fixture on the same port: actual sandbox, fake first planner turn.
 # After obtaining sufficient approved allowance (live retest still pending):
 node scripts/check-workflow-plan.mjs --paid
 ```
 
-Custom code/UX generation, compiled step fast paths, editing a run in place, plan
-archive/delete controls, simultaneous workflows and proactive completion speech
-are not implemented yet. The broader build goal remains active.
+The reuse fixture verified 6 → 9 guests and 12 → 18 snacks with one initial fixture
+planner call. Through native-browser companion controls, a third fresh run asked
+for its input and produced 24 snacks for 12 guests. Fresh-input reuse measured
+approximately 37–38 ms in isolated local runs, not end-to-end voice latency.
+Restart, changed dependencies, typed bindings, storage rollback/recovery,
+cancellation and unavailable weather are covered by deterministic regressions.
+No microphone capture, new API spend or new physical-device acceptance occurred.
+
+General compiled step execution, editing a run in place, plan archive/delete
+controls, simultaneous workflows and proactive completion speech remain future
+work. Custom calculation/code/UX foundations exist, but live generation acceptance
+and arbitrary integrations remain unverified. The broader build goal is active.

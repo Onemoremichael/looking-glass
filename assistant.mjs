@@ -1,6 +1,6 @@
 import { capabilities, presentation, validateDecision } from './assistant-contract.mjs';
 import {quickPhrase} from './quick-actions.mjs';
-import {weatherView} from './weather.mjs';
+import {weatherView,weatherIntent} from './weather.mjs';
 import {savedViewIntent,viewOfferCurrent} from './weather-composition.mjs';
 import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {gameIntent} from './playroom.mjs';
@@ -23,8 +23,13 @@ export class Assistant {
       return this.session.commitDecision(id,revision,{status:'execute',outcome:'Continue game',message:'Game answer',actions:[action],options:[],selectedOptionId:null},'');
     }
     let researchRequest=null;
-    const functionReuse=this.functions?analyzeFunctionReuse(utterance,this.session.state,this.session.now(),{learned:this.session.learnQuickActions}):{action:null};
-    let quick=(!workflowContext&&this.workflows?workflowIntent(utterance,this.session.state):null)||functionReuse.action||imageIntent(utterance,this.session.state)||researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
+    const workflowStep=workflowContext?.steps.find(s=>s.id===workflowContext.currentStepId);
+    if(workflowStep?.kind==='weather'&&this.weather){
+      onProgress({stage:'checking_data'});await this.weather.refresh();
+      if(signal?.aborted)throw Error('Request cancelled');
+    }
+    const functionReuse=this.functions&&!workflowContext?analyzeFunctionReuse(utterance,this.session.state,this.session.now(),{learned:this.session.learnQuickActions}):{action:null};
+    let quick=(!workflowContext&&this.workflows?workflowIntent(utterance,this.session.state):null)||(workflowStep?.kind==='weather'?weatherIntent(utterance,this.session.state.weather):null)||functionReuse.action||imageIntent(utterance,this.session.state)||researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
     if(quick?.action==='open_research_view'){
       const cached=this.session.state.researchCache?.find(b=>b.savedId===quick.viewId);
       if(quick.refresh||!cached||this.session.now()-cached.fetchedAt>=RESEARCH_FRESH_MS){
@@ -44,7 +49,7 @@ export class Assistant {
       if(quick.action.endsWith('_workflow'))return this.workflows.handle(id,quick,{revision,utterance});
       return this.session.commitDecision(id,revision,{status:'execute',outcome:'Use a saved view',message:'Requested',actions:[quick],options:[],selectedOptionId:null},utterance);
     }
-    if(this.weather&&(/weather|forecast|rain|week|weekend/i.test(utterance)||this.session.state.panel==='weather')){
+    if(!['weather','custom'].includes(workflowStep?.kind)&&this.weather&&(/weather|forecast|rain|week|weekend/i.test(utterance)||this.session.state.panel==='weather')){
       onProgress({stage:'checking_data'});
       await this.weather.refresh();
       if(signal?.aborted)throw Error('Request cancelled');
@@ -83,9 +88,15 @@ export class Assistant {
         durability:{autoSave:true,supportedKinds:['weather','research','workflow','function'],stores:'validated configuration, not data or action replays'},
         presentation:view,surfaces:reports,history:state.assistantHistory||[],resolvedSelection,
       }),(key,value)=>typeof value==='string'&&reverse.has(value)?reverse.get(value):value);
-      const decision=validateDecision(await this.planner.decide({
-        ...aliased,
-      },{signal,trace:span}));
+      // A pure workflow calculation is defined by its run, not unrelated chat,
+      // current weather, ambient time or whatever happens to be on the mirror.
+      // This bounded planning context is also the contract for learned executors.
+      const planningContext=workflowStep?.kind==='custom'?{
+        utterance,workflowContext,resolvedSelection,customFunctions:aliased.customFunctions,
+        reusableViews:aliased.reusableViews.filter(v=>v.kind==='function'),
+        durability:aliased.durability,capabilities:aliased.capabilities,
+      }:aliased;
+      const decision=validateDecision(await this.planner.decide(planningContext,{signal,trace:span}));
       // A model-selected stale recipe gets a new research turn, never stale facts
       // represented as a fresh result. Tell the user to request refresh if the
       // planner did not follow the supplied cache state.

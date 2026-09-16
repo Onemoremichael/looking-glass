@@ -39,6 +39,9 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    or child-ready claim. Four synthetic safety fixtures and 235 offline tests pass.
    Repeatable local acceptance scripts and transcript-free classification metrics
    make the remaining failures inspectable without spending API budget.
+   **Voice experience correction:** GPT-Live/Marin remains the primary voice.
+   Companion copy now clearly distinguishes optional Samantha local diagnostics,
+   collapsed by default; no silent fallback or newly started paid session.
 4. **Adaptable workflows** — implemented durable ordered plans, named inputs,
    background guarded step execution, tool/human completion evidence, resumable
    questions, cancellation and restart recovery. Plans auto-save; parameterized
@@ -64,6 +67,15 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    pass. Two Android framebuffer pages and companion input/paging were inspected;
    local reuse measured 31–32 ms in the fixture (not voice latency). Paid/spoken
    end-to-end acceptance remains pending; no new API spend or microphone capture.
+   **Workflow executor reuse:** verified pure calculation steps now auto-save
+   typed named-input bindings. Fresh runs execute saved code through the same
+   sandbox/test/output gates, with specification and prior-evidence invalidation.
+   Pure step planning is isolated from unrelated ambient state and web tools.
+   Weather steps can use built-in intent routing after refresh. 250 offline tests
+   pass; native-browser fixture reused 6/9/12 guest inputs to render 12/18/24 snacks,
+   without another planner call after the initial fixture calculation. Local reuse
+   measured 37–38 ms, not voice latency. General step compilation and paid/spoken
+   acceptance are still pending. Docs and a repeatable preview script are included.
 5. **Integration/polish** — pending: expectation-setting, timer language gaps,
    wake calibration, microphone/speaker replay, restart/reuse verification.
 

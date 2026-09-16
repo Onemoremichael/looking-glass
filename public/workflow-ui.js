@@ -14,7 +14,7 @@
         html+='<div class="workflow-focus"><span class="workflow-kicker">'+(r.status==='completed'?'ALL SET':r.status==='needs_input'?'YOUR TURN':'NEXT UP')+'</span><h3>'+esc(r.status==='completed'?'A little more done.':current?current.title:r.title)+'</h3><p>'+esc(r.detail)+'</p></div>';
         if(r.status==='needs_input'&&current&&current.options&&current.options.length)html+='<ol class="workflow-options">'+current.options.map(function(o){return '<li>'+esc(o.label)+'</li>';}).join('')+'</ol>';
         var visible=companion?r.steps:r.steps.slice(Math.max(0,index-1),Math.max(0,index-1)+3);
-        html+='<ol class="workflow-steps">'+visible.map(function(s){return '<li><span class="workflow-step-number">'+(s.status==='completed'?'✓':r.steps.indexOf(s)+1)+'</span><div><h4>'+esc(s.title)+'</h4><p>'+esc(s.status.replace(/_/g,' '))+'</p>'+(companion&&s.evidence?'<details><summary>Completion evidence</summary><p>'+esc(s.evidence.summary||s.evidence.confirmation||s.evidence.type)+'</p></details>':'')+'</div></li>';}).join('')+'</ol>';
+        html+='<ol class="workflow-steps">'+visible.map(function(s){return '<li><span class="workflow-step-number">'+(s.status==='completed'?'✓':r.steps.indexOf(s)+1)+'</span><div><h4>'+esc(s.title)+'</h4><p>'+esc(s.status.replace(/_/g,' '))+'</p>'+(companion&&s.evidence?'<details><summary>Completion evidence'+(s.execution==='saved_function'?' · reused locally':'')+'</summary><p>'+esc(s.evidence.summary||s.evidence.confirmation||s.evidence.type)+'</p></details>':'')+'</div></li>';}).join('')+'</ol>';
         if(companion){
           html+='<div class="workflow-controls">';
           if(r.status==='running')html+=button('pause_workflow',r,'Pause');
