@@ -2,6 +2,7 @@ import { capabilities, presentation, validateDecision } from './assistant-contra
 import {quickPhrase} from './quick-actions.mjs';
 import {weatherView} from './weather.mjs';
 import {savedViewIntent,viewOfferCurrent} from './weather-composition.mjs';
+import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 export class Assistant {
   constructor({session,planner,surfaces,telemetry,weather}){Object.assign(this,{session,planner,surfaces,telemetry,weather});this.inflight=new Map();}
   execute(id,utterance,{signal,trace,onProgress=()=>{},beforeCommit=async()=>{}}={}) {
@@ -11,12 +12,19 @@ export class Assistant {
   }
   async run(id,utterance,{signal,trace,onProgress,beforeCommit}) {
     if(typeof utterance!=='string'||!utterance.trim()||utterance.length>4000)return {status:'needs_input',message:'I did not catch a request. Please say it again.'};
-    const quick=savedViewIntent(utterance,this.session.state,this.session.now());
+    let researchRequest=null;
+    let quick=researchIntent(utterance,this.session.state)||savedViewIntent(utterance,this.session.state,this.session.now());
+    if(quick?.action==='open_research_view'){
+      const cached=this.session.state.researchCache?.find(b=>b.savedId===quick.viewId);
+      if(quick.refresh||!cached||this.session.now()-cached.fetchedAt>=RESEARCH_FRESH_MS){
+        researchRequest=this.session.state.reusableViews.find(v=>v.id===quick.viewId)?.spec;quick=null;
+      }
+    }
     if(quick){
       const revision=this.session.state.revision;
       await beforeCommit();
       if(signal?.aborted)throw Error('Request cancelled');
-      return this.session.commitDecision(id,revision,{status:'execute',outcome:'Use a weather view',message:'Requested',actions:[quick],options:[],selectedOptionId:null},utterance);
+      return this.session.commitDecision(id,revision,{status:'execute',outcome:'Use a saved view',message:'Requested',actions:[quick],options:[],selectedOptionId:null},utterance);
     }
     if(this.weather&&(/weather|forecast|rain|week|weekend/i.test(utterance)||this.session.state.panel==='weather')){
       onProgress({stage:'checking_data'});
@@ -50,12 +58,17 @@ export class Assistant {
         weather:weatherView(state.weather,this.session.now()),
         viewOffer:viewOfferCurrent(state,this.session.now())?state.viewOffer:null,
         weatherViews:state.weatherViews||[],
-        reusableViews:state.reusableViews||[],durability:{autoSave:true,supportedKinds:['weather'],stores:'validated configuration, not data or action replays'},
+        reusableViews:state.reusableViews||[],researchRequest,research:state.research||null,
+        researchCache:(state.researchCache||[]).map(b=>({viewId:b.savedId,fresh:this.session.now()-b.fetchedAt<RESEARCH_FRESH_MS})),
+        durability:{autoSave:true,supportedKinds:['weather','research'],stores:'validated configuration, not data or action replays'},
         presentation:view,surfaces:reports,history:state.assistantHistory||[],resolvedSelection,
       }),(key,value)=>typeof value==='string'&&reverse.has(value)?reverse.get(value):value);
       const decision=validateDecision(await this.planner.decide({
         ...aliased,
       },{signal,trace:span}));
+      // A model-selected stale recipe gets a new research turn, never stale facts
+      // represented as a fresh result. Tell the user to request refresh if the
+      // planner did not follow the supplied cache state.
       if(signal?.aborted)throw Error('Request cancelled');
       if(decision.selectedOptionId&&targets.has(decision.selectedOptionId))decision.selectedOptionId=targets.get(decision.selectedOptionId);
       for(const option of decision.options)if(targets.has(option.id))option.id=targets.get(option.id);

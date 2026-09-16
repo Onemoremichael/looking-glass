@@ -53,7 +53,10 @@ connection still shows a stale-data warning.
   See [adaptive views and voice test flow](docs/ADAPTIVE-VIEWS.md).
 - State saved atomically to ignored `data/state.json`; restart preserves items.
 - Request capture and an example clarification flow for Gators sports.
-- Explicit blocked status when research requires an unconnected data provider/worker.
+- Live, read-only web research assembled into cited briefing, agenda, comparison,
+  or step-by-step boards. Three large cards per page with voice paging. Recipes
+  save automatically; cached results reopen locally for 15 minutes, and refresh
+  re-runs the query rather than pretending old facts are current. See [research](docs/RESEARCH.md).
 - Save configured requests as recipes; fork preferences without modifying originals.
 - Shared live updates and reconnect status.
 - GPT-Live-1 WebRTC adapter with Mac mic/speakers, Start/End/Mute, server-side tools,
@@ -116,10 +119,13 @@ restart after editing it. `.env` is git-ignored and is not served to browsers.
 Adding a key alone does not start a paid session. The local approved-budget ledger
 is also required; this prototype fails closed if it is absent. It is not an account-wide billing cap.
 
-Agents API is connected for outcome planning (not web research). Weather uses the
-separate Open-Meteo adapter; calendar, live sports data and camera are not connected.
-Typed requests use limited local rules—not language-model reasoning. Saved views
-are configurations, not researched results. No automatic or scheduled work runs.
+Agents API is connected for outcome planning and read-only web research. Weather
+uses the separate Open-Meteo adapter; calendar and camera are not connected.
+Typed prototype requests still use limited local rules—not language-model reasoning.
+Saved research recipes are configurations; their timestamped result cache is separate.
+No automatic or scheduled work runs. The broader build is tracked in
+[the ambitious-pass ledger](docs/AMBITIOUS-PASS.md), including pending games,
+image capabilities and custom workflow construction.
 The old enchanted-face direction has been replaced by this practical foundation.
 
 See [the outcome-first assistant](docs/ASSISTANT.md) for architecture, limits and

@@ -13,8 +13,9 @@
   }
   function esc(s){return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function render(state){
-    lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':'');
+    lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':state.panel==='research'?' research-open':'');
     var html='';
+    if(state.panel==='research')html=window.GlassResearch.render(state.research,false);
     if(state.panel==='weather')html='<div id="weather-content">'+window.GlassWeather.render(state.weather)+'</div>';
     if(state.panel==='calendar')html='<article><span class="tag">NOT CONNECTED</span><h2>Calendar</h2><p>Set up this connection from your companion.</p></article>';
     if(state.panel==='todos')html=state.todos.slice(0,5).map(function(t,i){return '<p class="'+(t.done?'done':'')+'">'+(i+1)+'. '+(t.done?'✓ ':'○ ')+esc(t.text)+'</p>';}).join('')+(state.todos.length>5?'<p class="note">More items on your companion.</p>':'')||'<p class="empty">Nothing on your list.</p>';
