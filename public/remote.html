@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Looking Glass companion</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/voice.css"></head>
+<body><main class="shell">
+<header><a href="/">OPEN MIRROR DISPLAY ↗</a><span id="date"></span><a href="/diagnostics">LOCAL TRACES ↗</a></header>
+<section class="hero"><div><div id="clock"></div><h1>A little help, out loud.</h1></div><span class="mode">MAC VOICE LAB<br>MIRROR AUDIO COMES LATER</span></section>
+<section id="voice-card" class="voice-card" data-phase="off" aria-label="Voice conversation">
+<div class="voice-heading"><span class="voice-orb" aria-hidden="true"></span><span id="voice-status" role="status">Microphone off</span></div>
+<p>“Set a timer for two minutes.” “Add buy milk to my to-do list.” “Show my to-do list.”</p>
+<div class="voice-controls"><button id="voice-start">Start conversation</button><button id="voice-mute" class="subtle" aria-pressed="false" disabled>Mute microphone</button><button id="voice-stop" class="subtle" disabled>End conversation</button></div>
+<audio id="voice-audio" controls autoplay hidden aria-label="AI voice playback"></audio>
+<p class="note">Mac microphone and speakers · AI-generated voice · three-minute sessions · voice $0.05/minute, including muted time, plus agent planning usage. Clear timer starts run locally; other requests still use slower planning. Start sends microphone audio to OpenAI; delegated requests send app context. No camera or local audio recording. Timer alerts are visual only.</p>
+</section><nav id="nav" aria-label="Capabilities"></nav>
+<section class="workspace"><div class="content"><div id="message" role="status"></div><div id="panel"></div></div><aside>
+<span class="eyebrow">LOCAL CONTROLS</span><h2>Within reach.</h2><p>Try “show the clock”, “show timers”, or “go home”. Weather, calendar and research are not connected yet.</p>
+<details><summary>Prototype request controls</summary><form id="request-form"><label for="request">Request</label><textarea id="request" required maxlength="300" placeholder="Set a 5 minute timer"></textarea><button>Send request ↗</button></form><p class="note">Typed requests use local rules, not AI.</p><button class="subtle" id="gators">Try the Gators workflow</button></details>
+</aside></section><footer id="connection"></footer></main><script src="/surface.js"></script><script src="/remote.js"></script><script type="module" src="/voice-client.js"></script></body></html>

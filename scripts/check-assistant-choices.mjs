@@ -1,0 +1,26 @@
+// Two paid synthetic decisions. Leaves the real application data untouched.
+import { fileURLToPath } from 'node:url';
+import assert from 'node:assert/strict';
+import { Session } from '../session.mjs';
+import { Assistant } from '../assistant.mjs';
+import { SurfaceRegistry } from '../assistant-contract.mjs';
+import { AgentsPlanner } from '../agents-planner.mjs';
+import { ApiBudget } from '../api-budget.mjs';
+if(!process.argv.includes('--run-paid'))throw Error('Pass --run-paid for two synthetic decisions');
+process.loadEnvFile(fileURLToPath(new URL('../.env',import.meta.url)));
+const session=new Session(),surfaces=new SurfaceRegistry();
+session.command('start_timer',{label:'Tea',seconds:300});session.command('start_timer',{label:'Laundry',seconds:600});
+const planner=new AgentsPlanner({budget:new ApiBudget(fileURLToPath(new URL('../data/api-test-budget.json',import.meta.url)))});
+const assistant=new Assistant({session,surfaces,planner});
+await assistant.execute('choose','I want to cancel one timer. Show me the options first.');
+await planner.drain();
+console.log(JSON.stringify({case:'options',timing:planner.lastTiming,card:session.state.assistant}));
+assert.equal(session.state.assistant.status,'clarify');assert.equal(session.state.assistant.options.length,2);
+const second=session.state.assistant.options[1];
+surfaces.report({clientId:'synthetic',surface:'mirror',visible:true,revision:session.state.revision},session.state);
+await assistant.execute('select','yeah the second one');
+await planner.drain();
+console.log(JSON.stringify({case:'selection',timing:planner.lastTiming,chosen:second,remaining:session.state.timers.map(t=>t.label)}));
+assert.equal(session.state.timers.length,1);
+assert.ok(!second.label.toLowerCase().includes(session.state.timers[0].label.toLowerCase()));
+console.log('Displayed second-option selection passed.');
