@@ -30,6 +30,15 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    audio, child-speech coverage and provider privacy requirements remain gates.
    See [evidence and limitations](PLAYROOM.md). Generated artwork is not completion
    of the application's image-generation API integration.
+   **Local speech acceptance:** replaced the onset-sensitive streaming recognizer
+   with local Silero VAD + Whisper small.en, bounded transient audio context and
+   macOS synthesis. Physical bear replay completed three spoken ordinal choices
+   and final playback, then shut capture off; the speaking frame was inspected.
+   Animal replay advanced elephant/giraffe but requested a retry for unclear
+   penguin. Short names and spoken squeak still fail acceptance; no forced aliases
+   or child-ready claim. Four synthetic safety fixtures and 235 offline tests pass.
+   Repeatable local acceptance scripts and transcript-free classification metrics
+   make the remaining failures inspectable without spending API budget.
 4. **Adaptable workflows** — implemented durable ordered plans, named inputs,
    background guarded step execution, tool/human completion evidence, resumable
    questions, cancellation and restart recovery. Plans auto-save; parameterized

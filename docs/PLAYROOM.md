@@ -25,10 +25,13 @@ See [artwork prompts and provenance](PLAYROOM-ART.md).
 ## Opt-in local audio (Mac + Mirror)
 
 Install with `npm run wake:setup` followed by `npm run playroom:setup`. The latter
-downloads the Apache-2.0 English 20M streaming Zipformer model from the
+downloads Whisper `small.en` (about 606 MiB compressed) and Silero VAD from the
 [official Sherpa release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models)
-and checks a pinned SHA-256 before extraction. Model weights remain in ignored
+and checks pinned SHA-256 values before use. Model weights remain in ignored
 `data/playroom/`; the Python runtime is shared with wake detection.
+See the upstream [Whisper model instructions](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/whisper/tiny.en.html)
+(which also describe selecting `small.en`) and
+[VAD example](https://github.com/k2-fsa/sherpa-onnx/blob/master/python-api-examples/vad-microphone.py).
 
 In the Mac-local companion, acknowledge adult rehearsal, choose a game, then click
 **Start local game audio**. Stop other voice and wake modes first. This mode uses
@@ -38,10 +41,18 @@ not recorded or added to transcript telemetry. Temporary synthesized prompt WAVs
 are deleted after use. Only bounded game-engine prompts are spoken.
 
 Recognition pauses during playback and an echo tail; generations discard stale
-answers. Unrecognized/background phrases do not advance the game or trigger a
-reply. This is conservative phrase filtering, not speaker identification.
+answers. Silero separates utterances after 600 ms of silence; a bounded 12-second
+in-memory ring preserves 250 ms around the speech boundary so quiet word beginnings
+are not discarded. Utterances are bounded to eight seconds by VAD; Whisper receives
+no prior conversation and no expected-answer prompt. Silence is not decoded.
+
+Unrelated/background phrases are ignored. Short answer-shaped uncertainty such as
+“a …” can request a gentle retry without marking the answer wrong or awarding credit.
+Negated/ambiguous phrases are not guessed. This is conservative phrase filtering,
+not speaker identification. Status diagnostics expose word counts, classification
+and a boolean animal-name match, never recognized text.
 Capture stops on completion, explicit stop, disconnect, audio faults, 45 seconds
-without an accepted answer, or a three-minute overall limit. Closing the browser
+without handled game input, or a three-minute overall limit. Closing the browser
 does not immediately stop it; use **Stop local mic** or **Finish & stop microphone**.
 Restarting the server does not resume capture. Local game audio cannot share the
 microphone with wake listening or cloud voice.
@@ -66,17 +77,45 @@ controls, content-safety behavior and realistic speech coverage remain release g
   echo/late-answer rejection, startup cancellation, disconnects, inactivity and
   capture watchdogs, synthesis failure, WAV validation, same-origin adult entry
   and exclusive microphone ownership. These use fake audio, not hardware proof.
-- The full offline suite passes **234 tests**. The installed model loads and
-  transcribes its bundled English sample. A Samantha-generated “I think it is an
-  elephant” sample was misrecognized as “ANT”, including after native-rate synthesis
-  and resampling. Synthetic game-answer recognition therefore remains a known
-  failing acceptance check; local audio is experimental, not verified gameplay.
+- The full offline suite passes **235 tests**. The previous 20M streaming model
+  dropped parts of short words depending on onset alignment. A newer streaming
+  model and smaller Whisper variants were also evaluated, not assumed reliable.
+  `small.en` improves recognition, but short-name coverage is still incomplete.
+- Synthetic safety checks pass: silence yields no answer; negation, multiple-animal
+  ambiguity and a background-conversation sentence are decoded without grading or
+  advancing the game. This is four fixtures, not broad ambient-speech validation.
 - The animal layout was visually inspected on the physical Android mirror.
-- The Mac-speaker-to-Mirror-microphone test **failed to advance the first animal
-  card**. It shut down its voice session and exited playroom. End-to-end spoken
-  gameplay is therefore unverified; do not treat mocked audio tests as hardware proof.
-- Bear hardware animation/alignment and full spoken multi-turn completion remain
-  pending. No automatic paid retry or budget increase was made.
+- **Physical animal replay:** fuller Samantha answers at Mac volume 70 advanced
+  elephant and giraffe in 3.60 and 3.15 seconds from speech-playback start. Penguin
+  was unclear; the Mirror asked for a retry without advancing. Full completion
+  remains unverified. Short synthetic names still fail acceptance, including
+  penguin/bear; Daniel also misrecognized giraffe. No spelling aliases were added
+  to force those tests to pass.
+- **Physical bear replay passed all three turns** using “the second one”, “the
+  second one”, “the third one”: 3.10 / 3.06 / 2.97 seconds from playback start to
+  state advance. The final story correctly reflected ocean, kite and squeak. Native
+  playback completed and capture stopped automatically. A prior label-based run
+  passed ocean/kite but failed on spoken “squeak”; label coverage remains a gate.
+- [Physical speaking-frame evidence](evidence/local-bear-speaking-2026-09-16.png)
+  shows the correctly placed mouth overlay, native speaking indicator and completed
+  story. The subsequent wording change removes the invitation to answer after the
+  microphone shuts down. This frame is not lip-sync or real-child acceptance proof.
+- Every physical test exited playroom and stopped the microphone. Mac volume was
+  restored to 38 after the louder tests. No paid API calls or budget increase.
+
+Repeatable **local** acceptance checks (no API spend):
+
+```sh
+npm run playroom:check  # broad short-name acceptance: currently fails; do not hide it
+node scripts/check-local-playroom.mjs --synthetic --safety
+node scripts/check-local-playroom.mjs --adult-simulation --full-answers
+node scripts/check-local-playroom.mjs --adult-simulation --bear --ordinals
+```
+
+Only `--adult-simulation` opens the Mirror mic and plays speech through the Mac
+speakers. It requires idle voice/wake/game state, waits for the USB audio peer and
+cleans up on failure. `--daniel` provides a second synthetic voice. The script does
+not change system volume. Ordinal success does not imply spoken-label accuracy.
 
 An explicit, paid adult simulation can be run after checking the shared allowance
 and stopping existing voice/wake sessions:

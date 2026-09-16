@@ -37,14 +37,25 @@ export class LocalPlayroom{
     const pcm=await this.synthesize(text,{signal:a.controller.signal});if(this.active!==a)return;
     this.update('speaking','Speaking on the Mirror');await this.play(this.mirror,pcm,{signal:a.controller.signal});if(this.active!==a)return;
     if(this.session.state.playroom?.phase==='complete'){this.stop('complete');return;}
-    a.recognizer.reset();a.lastAnswer=a.lastFrame=this.now();this.update('listening','Listening locally · say an animal, hint, skip or stop');
+    a.recognizer.reset();a.lastAnswer=a.lastFrame=this.now();this.update('listening',this.session.state.playroom?.kind==='bear'?'Listening locally · say a choice, option number or stop':'Listening locally · say an animal, hint, skip or stop');
   }
   async answer(a,text){
     if(this.active!==a||this.state.phase!=='listening')return;
     if(typeof text!=='string'||!text.trim()||text.length>1000)return;
     const game=this.session.state.playroom;if(!game||game.id!==a.gameId){this.stop('changed');return;}
     const candidate=advanceGame(structuredClone(game),text);
-    if(candidate.feedback==='uncertain'){this.state.ignored++;return;} // No wrong judgment or chatter over background speech.
+    // Diagnostics expose classification/counts, never recognized words.
+    this.state.lastRecognition={words:text.trim().split(/\s+/).length,feedback:candidate.feedback,
+      animalMention:/\b(?:elephant|giraffe|penguin|bear)\b/i.test(text)};
+    if(candidate.feedback==='uncertain'){
+      // A short, answer-shaped utterance can ask for a retry, never earn credit.
+      // Do not turn negation, ambiguity or unrelated conversation into answers.
+      const normalized=text.toLowerCase().replace(/[’']/g,'').replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+      const answerShaped=game.kind==='animals'&&normalized.split(' ').length<=8&&
+        /^(?:a |an |it is |its |that is |thats |i think (?:it is |its ))/.test(normalized)&&
+        !/\b(?:not|dont|no|or|maybe)\b/.test(normalized);
+      if(!answerShaped){this.state.ignored++;this.update('listening',this.state.detail);return;}
+    }
     this.update('preparing','Checking the game answer');a.lastAnswer=this.now();
     try{
       const r=this.session.commitDecision('local-game:'+a.id+':'+game.turn,this.session.state.revision,{status:'execute',outcome:'Continue local game',message:'Game answer',actions:[{action:'playroom_turn',gameId:game.id,turn:game.turn,text}],options:[],selectedOptionId:null},'');
