@@ -40,7 +40,7 @@ export function workflowIntent(text,state){
   if(rerun){const views=(state.reusableViews||[]).filter(v=>v.kind==='workflow'&&v.spec.title.toLowerCase()===rerun[1]);if(views.length===1)return {action:'reuse_workflow',viewId:views[0].id,values:[]};}
   return null;
 }
-const permitted={research:['compose_research','open_research_view'],weather:['get_weather','compose_weather','open_weather_view'],todos:['add_todo'],artwork:['generate_image','open_image']};
+const permitted={research:['compose_research','open_research_view'],weather:['get_weather','compose_weather','open_weather_view'],todos:['add_todo'],artwork:['generate_image','open_image'],custom:['create_function','run_function']};
 async function waitForJob(promise,signal){
   let abort;const stopped=new Promise(resolve=>{abort=()=>resolve();signal.addEventListener('abort',abort,{once:true});if(signal.aborted)resolve();});
   try{await Promise.race([promise,stopped]);}finally{signal.removeEventListener('abort',abort);}
@@ -141,7 +141,7 @@ export class Workflows {
     while(!signal.aborted){
       const run=this.get(id),step=run.steps.find(s=>s.status!=='completed');
       if(!step){this.update(id,r=>{r.status='completed';r.detail='All steps have completion evidence. The plan is saved for a fresh run.';r.completedAt=this.session.now();});return;}
-      if(step.kind==='confirm'||step.kind==='custom'){
+      if(step.kind==='confirm'||step.kind==='custom'&&!this.assistant?.functions){
         this.update(id,r=>{const s=r.steps.find(s=>s.id===step.id);s.status=s.kind==='confirm'?'needs_input':'blocked';s.detail=s.kind==='confirm'?s.request:'This needs a capability that is not implemented. I can help define the missing function and UX; I cannot execute arbitrary code yet.';r.status=s.status;r.detail=s.detail;});return;
       }
       if(!this.assistant)throw Error('Planner unavailable');
@@ -171,6 +171,7 @@ export class Workflows {
           if(job?.status!=='completed')evidence=null;
         }
         if(item.kind==='weather'&&!result.weatherAvailable)evidence=null;
+        if(item.kind==='custom'){if(!result.functionVerified)evidence=null;else evidence.functionOutput=result.functionOutput;}
       }
       this.update(id,r=>{const s=r.steps.find(s=>s.id===item.id);s.evidence=evidence||null;s.options=result.options||[];
         s.status=evidence?'completed':result.status==='needs_input'?'needs_input':'blocked';s.response=result.message||'';s.detail=evidence?'Finished and saved.':result.status==='needs_input'?(result.question||result.message):result.weatherAvailable===false?'The requested forecast is unavailable, stale or incomplete. This step is not finished.':'No verified result was produced. Review this step before explicitly retrying or adapting the plan.';

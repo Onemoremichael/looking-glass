@@ -65,8 +65,13 @@ connection still shows a stale-data warning.
   mirror progress view are implemented and tested offline. A live planning smoke
   test was safely rejected for an inconsistent provider response. The structured
   contract is now hardened and regression-tested; a paid live retest remains a
-  prerequisite for live readiness. Custom code
-  execution is not yet available. See [workflows](docs/WORKFLOWS.md).
+  prerequisite for live readiness. See [workflows](docs/WORKFLOWS.md).
+- Custom functions: bounded pure JavaScript calculations in isolated QuickJS,
+  example-test gates, reusable recipes, and large metric/list/bar/note layouts.
+  Companion inputs rerun saved functions locally; eligible workflow custom steps
+  require execution receipts. No network, filesystem, or device access. Offline
+  execution and companion controls are verified; live model generation is not.
+  See [custom functions and limitations](docs/CUSTOM-FUNCTIONS.md).
 - Image studio: asynchronous GPT Image 2.5 Sunburst adapter, progress, cancellation,
   persistent artwork/recipes and free local reopening. Real telemetry integration
   is regression-tested; ledger settlement failures pause new generation. Provider access is still

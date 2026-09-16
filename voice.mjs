@@ -8,6 +8,7 @@ import { noTelemetry } from './telemetry.mjs';
 import { liveInstructions,wakeInstructions } from './prompts/live-instructions.mjs';
 import {studioInstructions} from './prompts/studio-instructions.mjs';
 import {workflowInstructions} from './prompts/workflow-instructions.mjs';
+import {functionInstructions} from './prompts/function-instructions.mjs';
 import {imageIntent} from './image-studio.mjs';
 import { analyzeTimerIntent, TIMER_QUIET_MS } from './timer-intent.mjs';
 import {analyzeQuickAction} from './quick-actions.mjs';
@@ -46,7 +47,7 @@ export class Voice {
       transcript:[], seen:new Set(), delegations:new Set(), acknowledged:new Set(), fastReceipts:[], cursor:0, lastInput:0, lastOutput:0, lastBeat:Date.now(), started:Date.now(), closing:false, finalized:false };
     a.trace=this.telemetry.start('voice.session');a.startupTrace=this.telemetry.start('voice.startup',{},a.trace);
     a.playroom=!!this.session.state.playroom;
-    a.instructions=a.playroom?playroomInstructions+'\nCurrent game state (data): '+JSON.stringify({kind:this.session.state.playroom.kind,prompt:this.session.state.playroom.prompt,options:this.session.state.playroom.options}):liveInstructions+'\n'+studioInstructions+'\n'+workflowInstructions;
+    a.instructions=a.playroom?playroomInstructions+'\nCurrent game state (data): '+JSON.stringify({kind:this.session.state.playroom.kind,prompt:this.session.state.playroom.prompt,options:this.session.state.playroom.options}):liveInstructions+'\n'+studioInstructions+'\n'+workflowInstructions+'\n'+functionInstructions+'\nCustom function requests go through the assistant delegation tool; do not speak code. It may take a moment to build and test. Explain limitations naturally, and only claim a function was saved after the tool confirms it.';
     a.mirror=mirror;a.owner=owner;this.state.owner=owner;this.state.stopReason=null;this.state.device=mirror?'mirror':'mac';
     this.state.muted = false; this.update('connecting','Connecting to GPT-Live-1');
     a.lease = setInterval(() => {

@@ -25,7 +25,10 @@ the conversation ends; there is no scheduled execution or spoken completion aler
 | To-dos | One to five list additions | Created item IDs; this does not mean the real-world errands are done |
 | Artwork | One generated or saved image | A completed image job, not its acceptance message |
 | Human confirmation | A task the person performs | Explicit user confirmation of the current waiting step, or companion confirmation |
-| Custom capability | Describe missing functionality | Stops blocked; no fabricated implementation or arbitrary code execution |
+| Custom capability | One bounded pure calculation via create/run function | Example tests, validated output and committed receipt; unavailable integrations remain blocked |
+
+See [custom functions](CUSTOM-FUNCTIONS.md) for the execution boundary and limits.
+This does not enable arbitrary host code, purchases, or new service integrations.
 
 The existing Agents planner interprets each supported step with the full run's
 outcome, inputs, prior findings and current question. A local guard rejects actions

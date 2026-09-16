@@ -3,7 +3,8 @@ import {randomUUID} from 'node:crypto';
 const canonical=value=>JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
 
 // Shared durable repertoire for assembled experiences. Adapters are trusted app
-// code: they validate configurations, never model-authored code or action replays.
+// code: they validate configurations, including sandbox-only function recipes.
+// Retention never executes generated code or replays actions.
 export class ReusableViews {
   constructor(adapters){this.adapters=adapters;}
   retain(state,{kind,scope,spec,parentId=null},now=Date.now()){

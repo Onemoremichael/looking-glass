@@ -4,15 +4,21 @@ import {weatherComponents,weatherRanges} from './weather-composition.mjs';
 import {researchBoardSchema,researchView} from './research-board.mjs';
 import {gameView} from './playroom.mjs';
 import {workflowSpecSchema,workflowValuesSchema,workflowView} from './workflows.mjs';
+import {functionSpecSchema} from './custom-functions.mjs';
 export const capabilities = {
   available: ['generate_image','open_image','cancel_image','get_time','get_weather','compose_weather','open_weather_view','compose_research','open_research_view','research_page','save_current_view','resolve_view_offer','show','start_timer','cancel_timer','add_todo','set_todo_done','remove_todo'],
   limitations: ['Timer alerts are visual only; no audible alarms.', 'Weather is Open-Meteo model data for saved locations only; no radar, severe-weather alerts, or automatic IP location. Set up places/units in companion.', 'No calendar account, music, camera, purchases or messages are connected. Web research is read-only, on demand, and limited to six displayed cards; no autonomous scheduled research.', 'Home/back returns home, not navigation history.', 'Only the first five to-dos are shown on the mirror; the companion shows all items.'],
 };
 const str = (maxLength=300) => ({type:'string',minLength:1,maxLength});
 capabilities.available.push('create_workflow','reuse_workflow','open_workflow','pause_workflow','cancel_workflow','continue_workflow','provide_workflow_inputs','confirm_workflow_step');
+capabilities.available.push('create_function','run_function','open_function','function_page');
 const obj = properties => ({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 export const weatherSpecSchema=obj({title:str(60),range:{enum:weatherRanges},startDate:{anyOf:[{type:'null'},str(10)]},endDate:{anyOf:[{type:'null'},str(10)]},focus:{enum:['general','rain','temperature']},components:{type:'array',items:{enum:weatherComponents},maxItems:3}});
 export const actionSchema = {anyOf:[
+  obj({action:{enum:['create_function']},spec:functionSpecSchema,inputJSON:str(4000),parentId:{anyOf:[{type:'null'},str(100)]}}),
+  obj({action:{enum:['run_function']},viewId:str(100),inputJSON:str(4000)}),
+  obj({action:{enum:['open_function']},viewId:str(100)}),
+  obj({action:{enum:['function_page']},direction:{enum:['next','previous']}}),
   obj({action:{enum:['create_workflow']},spec:workflowSpecSchema,values:workflowValuesSchema,parentId:{anyOf:[{type:'null'},str(100)]}}),
   obj({action:{enum:['reuse_workflow']},viewId:str(100),values:workflowValuesSchema}),
   obj({action:{enum:['open_workflow','pause_workflow','cancel_workflow']},runId:str(100)}),
@@ -31,7 +37,7 @@ export const actionSchema = {anyOf:[
   obj({action:{enum:['open_weather_view']},viewId:str(100)}),
   obj({action:{enum:['resolve_view_offer']},offerId:str(100),choice:{enum:['save','discard']}}),
   obj({action:{enum:['save_current_view']}}),
-  obj({action:{enum:['show']},panel:{enum:['home','time','timers','todos','weather','research','studio','workflows','calendar','tasks','saved']}}),
+  obj({action:{enum:['show']},panel:{enum:['home','time','timers','todos','weather','research','studio','workflows','functions','calendar','tasks','saved']}}),
   obj({action:{enum:['start_timer']},seconds:{type:'integer',minimum:1,maximum:86400},label:str(80)}),
   obj({action:{enum:['cancel_timer','remove_todo']},id:str(100)}),
   obj({action:{enum:['add_todo']},text:str()}),
@@ -94,6 +100,7 @@ export function presentation(state,now=Date.now()) {
   return {
     revision:state.revision, panel:state.panel,
     workflow:workflowView(state),
+    customFunction:state.panel==='functions'?state.customView||null:null,
     artwork:state.panel==='studio'?(state.imageJobs||[]).find(j=>j.id===state.imageJobId)||null:null,
     playroom:gameView(state.playroom),
     assistantCard:state.assistant&&state.assistant.status!=='execute'?{status:state.assistant.status,message:state.assistant.message,options:state.assistant.options}:null,

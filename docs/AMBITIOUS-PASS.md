@@ -40,8 +40,13 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    contract now encodes exclusive action/question branches, with boundary tests;
    a paid retest remains required. Spoken mixed-provider
    runs remain unverified. See [workflows](WORKFLOWS.md).
-   **Still pending:** sandboxed custom UX/code creation with validation and
-   promotion, not arbitrary host execution. Missing-capability steps stop honestly.
+   **Custom-function foundation:** pure JavaScript calculations execute in a
+   bounded QuickJS VM, pass example tests and output validation before saving,
+   and reuse with fresh inputs. Declarative metric/list/bar/note layouts keep
+   generated code off both display clients. Companion calculation and pagination
+   were verified in the browser; 215 offline tests pass. Live model generation,
+   spoken reuse, broader integrations and physical layout acceptance remain
+   unverified. See [custom functions](CUSTOM-FUNCTIONS.md).
 5. **Integration/polish** — pending: expectation-setting, timer language gaps,
    wake calibration, microphone/speaker replay, restart/reuse verification.
 

@@ -16,6 +16,7 @@
     lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':state.panel==='research'?' research-open':state.panel==='playroom'?' playroom-open':state.panel==='studio'?' studio-open':'');
     var html='';
     if(state.panel==='workflows'){document.body.className='mirror-display workflow-open';html=window.GlassWorkflow.render(state,false);}
+    if(state.panel==='functions'){document.body.className='mirror-display function-open';html=window.GlassFunction.render(state,false);}
     if(state.panel==='studio')html=window.GlassStudio.render(state,false);
     if(state.panel==='playroom')html=window.GlassPlayroom.render(state.playroom);
     if(state.panel==='research')html=window.GlassResearch.render(state.research,false);
