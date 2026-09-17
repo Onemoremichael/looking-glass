@@ -34,7 +34,9 @@ The mirror is output-only: no forms, buttons, links, or touch navigation.
 The phone/computer companion owns all current controls and shares state with the
 display. Voice can use the Mac or the native USB Mirror audio bridge. Active timers
 stay visible across panels. The mirror has a small active-conversation indicator,
-hidden when capture is off, with a static label during local wake standby. Setup controls remain on the companion. A lost display
+hidden when capture is off, except for a visible animated **Working in background**
+badge while delegated work runs, or **Result ready** while an announcement waits.
+Local wake standby retains its static label. Setup controls remain on the companion. A lost display
 connection still shows a stale-data warning.
 
 Native Mirror voice can close after 10 seconds of inactivity while delegated work

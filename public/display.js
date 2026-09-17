@@ -41,12 +41,21 @@
     var indicator=document.getElementById('mirror-voice');
     // Native audio has its own level-reactive indicator; retain actionable web status.
     var nativeRoutine=state.device==='mirror'&&['listening','speaking','muted'].indexOf(state.phase)!==-1;
+    var background=state.background||{},working=background.running>0,ready=background.waitingToAnnounce>0;
+    if(working||ready){
+      indicator.className='mirror-voice background-work';indicator.setAttribute('data-phase',working?'background':'ready');
+      document.getElementById('mirror-voice-label').textContent=working?(background.running>1?background.running+' tasks running':'Working in background'):'Result ready';
+      return;
+    }
     indicator.className='mirror-voice'+(state.phase==='off'||nativeRoutine?' off':''); indicator.setAttribute('data-phase',state.phase);
     document.getElementById('mirror-voice-label').textContent=state.phase==='needs_input'?state.detail:({listening:'Listening',thinking:'Working on your request',speaking:'Speaking',muted:'Mic muted',connecting:'Connecting',stopping:'Finishing',error:'Voice unavailable'}[state.phase]||'');
   },
   playroomAudio:function(state){if(window.GlassPlayroom)window.GlassPlayroom.voice(state);},
   state:function(state){render(state);var status=document.getElementById('connection');status.textContent='';status.hidden=true;},
-  error:function(){var status=document.getElementById('connection');status.textContent='Connection lost · displayed information may be stale';status.hidden=false;}
+  error:function(){var status=document.getElementById('connection');status.textContent='Connection lost · displayed information may be stale';status.hidden=false;
+    // A disconnected display must not keep implying that work is progressing.
+    document.getElementById('mirror-voice').className='mirror-voice off';
+  }
   });
   tick();setInterval(tick,500);
 }());

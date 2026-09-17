@@ -80,3 +80,21 @@ test('native conversation indicator replaces routine footer but preserves action
   assert.equal(elements['mirror-voice'].className,'mirror-voice');
   assert.equal(elements['mirror-voice-label'].textContent,'Listening');
 });
+test('background work stays visible without cloud voice, distinguishes ready, clears and fails stale',()=>{
+  const elements={};let handlers;
+  runInNewContext(readFileSync(new URL('../public/display.js',import.meta.url),'utf8'),{
+    location:{search:''},Intl,Date,setInterval(){},
+    window:{GlassSurface:{subscribe(value){handlers=value;}}},
+    document:{getElementById:id=>elements[id]??={setAttribute(k,v){this[k]=v;}},querySelectorAll:()=>[]}
+  });
+  for(const phase of ['off','listening','thinking','speaking','stopping']){
+    handlers.voice({device:'mirror',phase,background:{running:1,waitingToAnnounce:0}});
+    assert.equal(elements['mirror-voice'].className,'mirror-voice background-work');
+    assert.equal(elements['mirror-voice-label'].textContent,'Working in background');
+  }
+  handlers.voice({phase:'off',background:{running:2}});assert.equal(elements['mirror-voice-label'].textContent,'2 tasks running');
+  handlers.voice({phase:'off',background:{running:0,waitingToAnnounce:1}});assert.equal(elements['mirror-voice-label'].textContent,'Result ready');
+  assert.equal(elements['mirror-voice']['data-phase'],'ready');
+  handlers.error();assert.equal(elements['mirror-voice'].className,'mirror-voice off');assert.equal(elements.connection.hidden,false);
+  handlers.voice({phase:'off',background:{running:0,waitingToAnnounce:0}});assert.equal(elements['mirror-voice'].className,'mirror-voice off');
+});

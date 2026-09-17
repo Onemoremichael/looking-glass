@@ -51,6 +51,10 @@ the companion's off button is always the fallback.
   original arming and budget. Input/output activity, actual playback and unsettled
   corrections prevent idle timeout, but not the absolute cap. This is a heuristic,
   not VAD. See [background voice lifecycle](VOICE.md#background-task--voice-separation-september-17).
+  September 17 live traces verified idle closure → research failure → one reconnect
+  → generated spoken failure explanation; successful-result audibility remains
+  a separate acceptance check. The mirror now retains a visible background-work
+  badge while voice is off.
 - Manual sessions still use the existing 20-second companion heartbeat lease.
   Wake-owned sessions explicitly use the server lifecycle; native ping packets
   do not masquerade as browser heartbeats. Manual Start is excluded while armed.

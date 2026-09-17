@@ -8,6 +8,8 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 // Only typed metadata crosses this boundary. Never accept arbitrary exception text,
 // request bodies, URLs, SDP, IDs/tokens from providers, transcripts, labels or audio.
 const enums = {
+  planner_stage:['provider','contract','source_fetch','provenance'],
+  source_check:['provider_open','provider_search','provider_other','bounded_fetch'],
   phase:['off','connecting','listening','thinking','speaking','muted','needs_input','stopping','error'],
   wake_phase:['off','starting','standby','connecting','conversation','cooldown'],
   wake_reason:['user','shutdown','spoken_disable','detector_error','mirror_disconnected','startup_failed','arming_expired','audio_or_detector_stalled','voice_ended_unexpectedly','wake_limit','game_finished'],
@@ -19,10 +21,10 @@ const enums = {
   source:['builtin','learned'],
   template:['start_timer','cancel_only_timer','show_panel','get_weather','weather_view'],
   reason:['user','shutdown','lease_expired','duration_limit','idle_timeout','spoken_end','spoken_disable','wake_disabled','transport_error','startup_error','close_requested','expired','content','remote_hangup','connection_lost','unknown','game_complete','game_stopped','game_wrap_timeout'],
-  error_code:['startup_failed','transport_failed','tool_failed','budget_failed','final_usage_missing','hangup_failed','timer_context_failed','timer_confirmation_failed','agent_recovery_required','test_budget_exhausted'],
+  error_code:['startup_failed','transport_failed','tool_failed','budget_failed','final_usage_missing','hangup_failed','timer_context_failed','timer_confirmation_failed','agent_recovery_required','test_budget_exhausted','agent_provider_failed','agent_interrupted','planner_contract_invalid','planner_output_invalid','research_limit','research_source_unavailable','research_provenance_failed'],
   fallback_reason:['invalid_request','uncertain_language','unrecognized_duration','unsupported_wording','missing_duration','disabled','pending_clarification','state_changed','commit_failed','not_committed','ambiguous_target','stale_surface','not_learned'],
 };
-const numeric = new Set(['step_count','duration_ms','seconds','estimated_usd','transcript_chars','fragment_count','quiet_window_ms','since_last_fragment_ms','since_tool_ms','revision','timer_count']);
+const numeric = new Set(['source_count','step_count','duration_ms','seconds','estimated_usd','transcript_chars','fragment_count','quiet_window_ms','since_last_fragment_ms','since_tool_ms','revision','timer_count']);
 export function safeAttributes(input={}) {
   const out={};
   for(const [key,value] of Object.entries(input)) {
@@ -51,7 +53,7 @@ export function exportConfig(env={}) {
   return {url:url.toString(),headers,timeoutMillis:2000};
 }
 const names=new Set(['function.reuse','function.execute','workflow.run','workflow.step_reuse','image.generate','wake.state','voice.session','voice.background','voice.startup','voice.delegation','voice.tool','voice.timer_fast','voice.close','agent.decision','agent.planning','agent.cleanup','agent.recovery']);
-const eventNames=new Set(['phase','duplicate','watchdog','transport.error','usage','superseded','heartbeat.ready','playback.detected','waiting.acknowledgment','timer.delegation_reconciled','timer.fast_fallback','quick_action.promoted','game.wrapup','function.repair','background.detached','background.announced']);
+const eventNames=new Set(['phase','duplicate','watchdog','transport.error','usage','superseded','heartbeat.ready','playback.detected','waiting.acknowledgment','timer.delegation_reconciled','timer.fast_fallback','quick_action.promoted','game.wrapup','function.repair','background.detached','background.announced','research.source_checked']);
 export class Telemetry {
   constructor({file,env={},exporter,now=Date.now,maxBytes=2*1024*1024}={}) {
     this.file=file;this.now=now;this.maxBytes=maxBytes;this.records=[];this.failures=0;this.exportFailures=0;

@@ -22,7 +22,9 @@ provider-reported opened web pages, or to an independently retrieved public text
 page after actual provider search activity. Hosted search sometimes emits page
 opening as `other`, so URL-less events alone are not accepted as evidence. The
 fallback pins public IPv4 DNS, revalidates redirects, sends no credentials, caps
-pages at 512 KiB, and has a ten-second deadline. Every card cites a known source
+downloads at a 512 KiB nonempty text prefix, and has a ten-second deadline. Larger
+valid pages pass this reachability check; their remaining body is not downloaded.
+Every card cites a known source
 ID. This proves the source was opened, not that every sentence is true: relevance and faithful
 summarization still require model evaluation. Private/local URLs and executable
 markup are rejected or escaped. Web pages remain untrusted data, never instructions.
@@ -46,6 +48,22 @@ agent. The renderer does not invent data, dates, images or arbitrary HTML.
 Broader semantic recognition beyond saved titles remains follow-up work.
 
 ## Verification
+
+September 17 failure investigation: a stadium-capacity query completed at the
+provider, then failed locally because official athletics HTML exceeded the old
+512 KiB rejection threshold. Bounded-prefix reading fixes that false failure
+without raising the download limit or bypassing public-address, redirect, MIME
+or HTTP-status checks. The same isolated paid query then produced a validated
+three-card board in 26.4 seconds. This verifies pipeline completion, not factual
+ranking accuracy, live mirror rendering or spoken success. Research remains
+fallible and should not be treated as an independently fact-checked ranking.
+All 316 offline tests pass, including large-page streaming cutoff, empty/error
+responses, cleanup after source failure and private-error redaction.
+
+Planning failures now expose bounded categories and stages in local diagnostics:
+provider, contract, source fetch, and provenance. `research.source_checked` records
+the check type and source count, never raw URLs or source content. The user-facing
+source-access failure is distinct from a provider failure; no automatic paid retry.
 
 September 16 check: a real, isolated animal-comparison research turn produced a
 validated three-card board in 28.35 seconds. That run exposed a hyphenated-title

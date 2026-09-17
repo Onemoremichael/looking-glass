@@ -58,6 +58,7 @@ function stage(r,name,detail){
   r.stage=name;console.info('[voice startup]',name);paint('connecting',detail);
 }
 function paint(phase,detail) {
+  if(['off','standby'].includes(phase)&&backgroundPending())detail='Voice off · '+(serverVoice.background.running?'background task running':'result ready to announce');
   document.getElementById('voice-card').setAttribute('data-phase',phase);
   status.textContent=detail || ({off:'Microphone off',listening:'Listening',speaking:'Speaking',muted:'Microphone muted',thinking:'Checking your request',connecting:'Connecting…',stopping:'Finishing…'}[phase] || phase);
 }

@@ -22,6 +22,8 @@ export async function closeAgentSession(sessions,id,{complete=false,inspect=fals
 export function recoveryError(){return Object.assign(Error('Prior agent request is still active or needs usage review'),{code:'agent_recovery_required'});}
 
 export function assistantFailureMessage(error){
+  if(error?.code==='research_source_unavailable')return 'I found sources, but could not finish checking access to them. I have not displayed an unverified report.';
+  if(error?.code==='research_provenance_failed')return 'I could not verify the citations for that report, so I have not displayed it.';
   if(['function_check_failed','function_repair_invalid'].includes(error?.code))return 'That calculation did not pass its checks. I have not saved any changes or replaced the current result. We can refine the requirements before trying again.';
   if(error?.code==='agent_recovery_required')return 'I could not confirm that the previous planning session closed, so new planning is paused. Basic quick actions still work. The companion needs a connection or session cleanup check—not another repeat of your request.';
   if(error?.code==='test_budget_exhausted')return 'The approved test allowance is used up. More planning needs a budget review; repeating the request will not fix it.';

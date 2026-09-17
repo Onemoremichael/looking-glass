@@ -13,6 +13,7 @@ export function publicIPv4(ip){
 }
 // Pin DNS for each request, validate each redirect, never forward cookies/auth,
 // and only read a bounded text page. This is not a general proxy endpoint.
+export const SOURCE_PREFIX_BYTES=512*1024;
 export async function readPublicPage(value,{signal,resolve=resolve4,request}={}){
   let current=value;
   const deadline=AbortSignal.timeout(10000),combined=signal?AbortSignal.any([signal,deadline]):deadline;
@@ -32,11 +33,22 @@ export async function readPublicPage(value,{signal,resolve=resolve4,request}={})
           res.resume();resolveResult({redirect:res.headers.location});return;
         }
         if(res.statusCode!==200||!/^text\/(html|plain)/i.test(res.headers['content-type']||'')){res.resume();reject(Error('Research source unavailable'));return;}
-        let size=0,text='';res.on('data',chunk=>{
-          size+=chunk.length;if(size>512*1024){req.destroy(Error('Research source too large'));return;}
-          text+=chunk.toString('utf8');
+        // This check establishes public reachability, not claim verification.
+        // Large legitimate HTML pages need only a bounded nonempty prefix;
+        // stop the transfer at the cap instead of rejecting their total size.
+        let size=0,nonempty=false,finished=false;
+        const finish=truncated=>{
+          if(finished)return;finished=true;
+          if(nonempty)resolveResult({url:current,bytes:size,truncated});
+          else reject(Error('Empty research source'));
+        };
+        res.on('data',chunk=>{
+          if(finished)return;
+          const prefix=chunk.subarray(0,SOURCE_PREFIX_BYTES-size);
+          size+=prefix.length;nonempty=nonempty||!!prefix.toString('utf8').trim();
+          if(size>=SOURCE_PREFIX_BYTES){finish(true);req.destroy();}
         });
-        res.on('error',reject);res.on('end',()=>text.trim()?resolveResult({url:current,bytes:size}):reject(Error('Empty research source')));
+        res.on('error',reject);res.on('end',()=>finish(false));
       });
       req.on('error',reject);req.end();
     });
