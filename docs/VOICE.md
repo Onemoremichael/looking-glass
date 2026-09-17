@@ -235,9 +235,24 @@ receipts persist in ignored app state and are shared on trusted local surfaces.
 
 Deterministic tests cover timeout → completion/failure → reconnect, final-usage
 gating, completion during closure, overlap, stale commits, stop/mute/disarm races,
-expiry, manual Mirror behavior and one-attempt startup. Real spoken background
-completion acceptance remains a follow-up; the original stadium research exception
-is not diagnosed or fixed by this lifecycle change.
+expiry, manual Mirror behavior and one-attempt startup. September 17 live traces
+confirm idle closure while stadium research continued, followed by one reconnect
+and a provider output transcript explaining the failure. This verifies transport
+and generated speech, not independent human audibility or successful research
+announcement acceptance. The separate source-size failure is now fixed; see
+[research verification](RESEARCH.md#verification).
+
+The mirror shows a small high-contrast animated **Working in background** badge
+while delegated work runs, even with voice off, and **Result ready** while an
+announcement waits. Counts cover awaited assistant delegations, not separate
+image/workflow jobs. The badge clears after completion/cancellation and hides on
+connection loss rather than implying continued progress. Reduced motion disables
+its rotation. The companion retains background status across wake-state updates.
+Offline visual fixtures: `node scripts/preview-display-qa.mjs background-work`
+or `background-ready` (port 8784; no provider, microphone or production mutations).
+The running-work fixture was inspected in the native browser and on the Android
+1080×1920 framebuffer. Its top inset was corrected to avoid overlapping the clock.
+The production URL and native audio bridge were restored afterward.
 
 ## Verification
 

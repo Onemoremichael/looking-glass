@@ -11,4 +11,8 @@
 .assistant-card{border-color:#607865;background:transparent}.assistant-card .assistant-message{font-size:22px;margin:0;line-height:1.4}.assistant-options{padding-left:28px;line-height:1.5}.assistant-options li{padding:8px 10px;margin:8px 0;border-bottom:1px solid #34453a;font-size:20px}.mirror-display .assistant-options li{font-size:24px;color:#d9e5dc}.mirror-display .assistant-card{background:#000}
 button:disabled{opacity:.4;cursor:default}.mirror-display{background:#000}.mirror-display article{background:#000;border-color:#26322b}.mirror-display #clock{font-size:95px;font-size:clamp(68px,9vw,115px)}
 .mirror-voice{position:fixed;right:6%;bottom:5%;font-size:12px;color:#9faf9f;max-width:65%}.mirror-voice.off{display:none}
+.mirror-voice.background-work{top:12px;bottom:auto;display:flex;align-items:center;max-width:80%;padding:12px 18px;border:1px solid #42646e;border-radius:32px;background:#071114;color:#d7edf1;font-size:22px;line-height:1.25;letter-spacing:.02em}
+.background-work .voice-orb{width:18px;height:18px;margin:0 14px 0 0;box-shadow:none;background:transparent;border:2px solid #314951;border-top-color:#d7edf1;animation:work-orbit 2.4s linear infinite}
+.background-work[data-phase=ready] .voice-orb{animation:none;background:#b6d9c7;border-color:#b6d9c7}
+@keyframes work-orbit{to{transform:rotate(360deg)}}
 @keyframes breathe{50%{opacity:.45;transform:scale(.8)}}@media(prefers-reduced-motion:reduce){.voice-orb{animation:none!important}}

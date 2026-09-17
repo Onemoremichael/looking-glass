@@ -8,6 +8,7 @@ import {Session} from '../session.mjs';
 import {Assistant} from '../assistant.mjs';
 import {AgentsPlanner} from '../agents-planner.mjs';
 import {Voice} from '../voice.mjs';
+import {Telemetry} from '../telemetry.mjs';
 import {presentation} from '../assistant-contract.mjs';
 import {publicSource,validateResearchBoard,researchIntent} from '../research-board.mjs';
 const board=()=>({spec:{title:'Gators this week',query:'UF sports this week',layout:'agenda'},summary:'Two events to explore.',caveat:'Check times before leaving.',cards:Array.from({length:4},(_,i)=>({heading:'Event '+i,kicker:'Saturday · ET',body:'A fixture description.',detail:'Official schedule',sourceIds:['uf']})),sources:[{id:'uf',title:'Official schedule',url:'https://floridagators.com/sports/football/schedule'}]});
@@ -80,4 +81,22 @@ test('URL-less search events require independent verification and fail closed',a
     else await assert.rejects(p.decide({}),/not opened/);
     assert.equal(checks,1);await p.drain();
   }
+});
+test('failed source checks retain a safe actionable diagnostic and never publish unchecked research',async()=>{
+  const telemetry=new Telemetry(),session=new Session();
+  const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){
+    yield {type:'agent.session.created',session:{id:'test'}};
+    yield {type:'agent.session.turn.item.done',item:{type:'web_search_call',status:'completed',action:{type:'other'}}};
+    yield {type:'agent.session.turn.output_text.done',text:JSON.stringify({decision:decision(board())})};
+    yield {type:'agent.session.turn.completed'};
+  }};
+  let deleted=false;
+  const planner=new AgentsPlanner({telemetry,client:{beta:{agents:{sessions:{create:async()=>stream,delete:async()=>{deleted=true;}}}}},budget:{reserve:()=>1,finishAgent(){}},verifySources:async()=>{throw Error('PRIVATE raw URL and request text');}});
+  await assert.rejects(new Assistant({session,planner,telemetry}).execute('x','research'),{code:'research_source_unavailable'});
+  await planner.drain();assert.equal(deleted,true);assert.equal(session.state.panel,'home');
+  assert.deepEqual(planner.lastFailure,{stage:'source_fetch',error_code:'research_source_unavailable'});
+  const end=telemetry.records.find(r=>r.kind==='end'&&r.name==='agent.planning');
+  assert.equal(end.attributes.error_code,'research_source_unavailable');assert.equal(end.attributes.planner_stage,'source_fetch');
+  assert.ok(telemetry.records.some(r=>r.event==='research.source_checked'));
+  assert.doesNotMatch(JSON.stringify(telemetry.records),/PRIVATE|floridagators/);await telemetry.close();
 });

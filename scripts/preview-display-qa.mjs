@@ -11,6 +11,10 @@ if(scenario==='research-long'){
     caveat:fill('Layout test only, not a researched recommendation. Long caveats must remain reachable without scrolling on the mirror. ',300),
     cards:Array.from({length:6},(_,i)=>({heading:fill('Example '+(i+1)+' with a deliberately long descriptive heading. ',80),kicker:fill('LAYOUT REHEARSAL ',60),body:fill('This is test content, not a factual finding. It checks whether longer paragraphs remain readable from a distance on the portrait display. ',350),detail:fill('Extra context should not vanish below the physical display edge. ',100),sourceIds:['fixture']})),
     sources:[{id:'fixture',title:'Fixture source label, not evidence of research',url:'https://example.com/'}]};
+}else if(['background-work','background-ready'].includes(scenario)){
+  if(scenario==='background-work')app.voice.jobs.add({controller:new AbortController()});
+  else app.voice.announcements.push({expiresAt:Date.now()+300000});
+  app.voice.backgroundState();
 }else if(['dog','cat','duck','bear-complete'].includes(scenario)){
   app.session.startPlayroom(scenario==='bear-complete'?'bear':'animals',{deck:'familiar',shuffle:false});
   const g=app.session.state.playroom;

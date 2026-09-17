@@ -129,6 +129,16 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    reported stadium request failed before this change; its underlying research
    error is separate from the fixed premature voice closure.
 
+   **September 17 research failure follow-up:** live traces confirmed idle close,
+   continued research, one reconnect and a generated failure explanation. The
+   provider had completed; local source validation rejected oversized official
+   HTML. A bounded nonempty 512 KiB prefix now passes reachability without reading
+   the remaining body or weakening public-address/redirect/status/MIME checks.
+   The same isolated paid query completed in 26.4 seconds; this is pipeline
+   acceptance, not factual ranking verification or spoken success. 316 offline
+   tests pass. New safe stage/error telemetry pinpoints future failures. The mirror
+   and companion retain a visible background-work indicator while voice is off.
+
 After each pass: update docs with evidence and limitations, commit, push, merge.
 Owner's closure instruction: finish the functionality already in flight, then
 close the goal. Prioritize completion/acceptance over adding new feature scope.

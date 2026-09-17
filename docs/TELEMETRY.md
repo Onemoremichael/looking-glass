@@ -97,6 +97,10 @@ timestamps, random local trace IDs, action categories and performance/usage meta
 External export failures are counted; bounded queues/timeouts do not block local tools.
 Cloud end-to-end ingestion remains unverified until a project is configured.
 
+Research diagnostics include `planner_stage` (provider/contract/source_fetch/
+provenance), bounded failure codes and `research.source_checked` with check type
+and count. Raw exceptions, source URLs and generated source content are excluded.
+
 Official references checked September 15, 2026:
 - [Langfuse OTLP ingestion](https://langfuse.com/integrations/native/opentelemetry)
 - [OpenTelemetry JavaScript exporters](https://opentelemetry.io/docs/languages/js/exporters/)

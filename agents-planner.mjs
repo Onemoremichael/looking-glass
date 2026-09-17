@@ -48,12 +48,13 @@ export class AgentsPlanner {
   async runDecision(context,{signal,trace}={}) {
     const started=Date.now();let plannedAt;
     this.lastContractFailure=null;
+    this.lastFailure=null;
     this.client ||= new OpenAI({maxRetries:0,timeout:15000});
     await this.recover({signal,trace});
     if(signal?.aborted)throw Error('Request cancelled');
     const reservation=this.budget.reserve('agents-decision');
     const deadline=AbortSignal.timeout(this.timeoutMs),combined=signal?AbortSignal.any([signal,deadline]):deadline;
-    let stream,sessionId,turnId,complete=false,text='',usage,rejected=false,accepted=false;
+    let stream,sessionId,turnId,complete=false,text='',usage,rejected=false,accepted=false,stage='provider',failureCode;
     const openedUrls=new Set();let searches=0;
     const evidence=this.lastResearchEvidence={calls:[],citedUrls:[]};
     const timing={planningMs:null,readyMs:null,cleanupMs:null,totalMs:null};this.lastTiming=timing;
@@ -69,40 +70,51 @@ export class AgentsPlanner {
         if(nextId&&!sessionId){sessionId=nextId;this.budget.identifyAgent?.(reservation,sessionId);}
         if(event.type==='agent.session.turn.item.done'&&event.item?.type==='web_search_call'&&event.item.status==='completed'){
           evidence.calls.push(event.item.action);
-          if(++searches>10)throw Error('Research tool limit reached');
+          if(++searches>10)throw Object.assign(Error('Research tool limit reached'),{code:'research_limit'});
           if(event.item.action?.type==='open_page'&&event.item.action.url)openedUrls.add(event.item.action.url);
-          planning?.event('research.source_checked',{action:event.item.action?.type});
+          planning?.event('research.source_checked',{source_check:event.item.action?.type==='open_page'?'provider_open':event.item.action?.type==='search'?'provider_search':'provider_other',source_count:searches});
         }
         if(event.type==='agent.session.turn.output_text.done')text=event.text;
         if(event.type==='agent.session.turn.completed'){complete=true;usage=event.usage||event.turn?.usage;turnId=event.turn_id||event.turn?.id;plannedAt=Date.now();break;}
         if(['agent.session.turn.failed','agent.session.turn.cancelled','agent.session.failed','agent.session.requires_action','agent.session.error'].includes(event.type))throw Error('Agent could not produce a decision');
       }
-      if(!complete||combined.aborted)throw Error('Agent decision interrupted');
+      if(!complete||combined.aborted)throw Object.assign(Error('Agent decision interrupted'),{code:'agent_interrupted'});
+      stage='contract';
       if(text.length>96000)throw Error('Agent decision too large');
       const decision=validatePlannerResponse(JSON.parse(text));
       for(const a of decision.actions)if(a.action==='compose_research'){
+        stage='contract';
         evidence.citedUrls=a.board.sources.map(s=>s.url);
         validateResearchBoard(a.board);
         // Hosted search sometimes reports page opening as `other`, without a URL.
         // Require actual search activity and independently fetch missing sources.
         const missing=evidence.citedUrls.filter(url=>!openedUrls.has(url));
         if(missing.length&&searches){
+          stage='source_fetch';
           const verified=await this.verifySources(missing,{signal:combined});
           for(const url of verified)openedUrls.add(url);
           evidence.independentlyChecked=[...verified];
+          planning?.event('research.source_checked',{source_check:'bounded_fetch',source_count:verified.size});
         }
+        stage='provenance';
         validateResearchBoard(a.board,{openedUrls});
       }
       accepted=true;timing.readyMs=Date.now()-started;
       return decision;
     } catch(error) {
+      failureCode=error.code==='planner_contract_invalid'||error.code==='research_limit'||error.code==='agent_interrupted'?error.code:
+        combined.aborted?'agent_interrupted':({provider:'agent_provider_failed',contract:'planner_output_invalid',source_fetch:'research_source_unavailable',provenance:'research_provenance_failed'})[stage];
+      this.lastFailure={stage,error_code:failureCode};
+      // Bounded categories only: no raw exception, URLs, provider payload or
+      // generated text in exported diagnostics. Keep the original error local.
+      error.code=failureCode;
       if(error.code==='planner_contract_invalid')this.lastContractFailure=error.contract;
       rejected=!stream&&Number.isInteger(error.status)&&error.status>=400&&error.status<500;
       throw error;
     } finally {
       stream?.controller.abort();
       timing.planningMs=plannedAt?plannedAt-started:null;
-      planning?.end({outcome:accepted?'completed':signal?.aborted?'cancelled':'error'});
+      planning?.end({outcome:accepted?'completed':signal?.aborted?'cancelled':'error',error_code:failureCode,planner_stage:accepted?undefined:stage});
       const cleanupStarted=Date.now();
       const cleanupTrace=this.telemetry?.start('agent.cleanup',{},trace);
       // Independent cleanup signal: an aborted user request still needs server cancellation.
