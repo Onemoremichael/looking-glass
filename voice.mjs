@@ -20,7 +20,12 @@ import {assistantFailureMessage} from './agent-recovery.mjs';
 import {gameIntent,gameReceipt,playroomInstructions} from './playroom.mjs';
 
 export function isConversationEnd(text){return /^(?:(?:ok(?:ay)?|thanks|thank you)[,.!]?\s+)?(?:that['’]?s all|end (?:the )?conversation|stop listening|goodbye)(?:[,.!]?\s+(?:thanks|thank you|mirror))?[.!?\s]*$/i.test(text.trim());}
-export function wakeIdle(a,now){return a.owner==='wake'&&!!a.readyAt&&!a.finishing&&!a.pending&&!a.job&&now-Math.max(a.readyAt,a.lastInput,a.lastOutput,a.lastAudible||0)>=10000;}
+export function wakeIdle(a,now){
+  const waiting=!!a.job?.backgroundEligible&&!a.job.inputGate;
+  return (a.owner==='wake'||!!a.mirror)&&!!a.readyAt&&!a.finishing&&
+    (!(a.pending||a.job)||waiting)&&
+    now-Math.max(a.readyAt,a.lastInput,a.lastOutput,a.lastAudible||0,a.responsePendingAt||0)>=10000;
+}
 
 export class Voice {
   constructor({ session, budgetPath, publish = () => {}, clientFactory, attachFactory, telemetry=noTelemetry, assistant, fastTimers=process.env.OPENAI_TIMER_FAST_PATH!=='0', learnedFast=process.env.OPENAI_LEARNED_FAST_PATH!=='0' } = {}) {
@@ -32,12 +37,13 @@ export class Voice {
     this.clientFactory = clientFactory || (() => new OpenAI({ maxRetries:0, timeout:15000 }));
     this.attachFactory = attachFactory || ((client,id) => new SidebandWS(client,{session_id:id},{reconnect:null,handshakeTimeout:10000}));
     this.state = { phase:'off', detail:'Microphone off', muted:false }; this.active = null;
+    this.jobs=new Set();this.announcements=[];this.announcementEpoch=0;
   }
   update(phase, detail = '') {
     if(phase!==this.state.phase)this.active?.trace?.event('phase',{phase});
     this.state = { ...this.state, phase, detail }; this.publish(this.state);
   }
-  async start(sdp, mirror=null, {owner='companion'}={}) {
+  async start(sdp, mirror=null, {owner='companion',resuming=false}={}) {
     if(owner!=='companion'&&(!mirror||owner!=='wake'))throw Error('Invalid voice owner');
     if (this.active || this.blocked) throw Error('A voice session is active or needs finalization review.');
     if(this.session.state.playroom?.phase==='complete')throw Error('This game is finished. Start a new game from the companion first.');
@@ -49,7 +55,7 @@ export class Voice {
     a.trace=this.telemetry.start('voice.session');a.startupTrace=this.telemetry.start('voice.startup',{},a.trace);
     a.playroom=!!this.session.state.playroom;
     a.instructions=a.playroom?playroomInstructions+'\nCurrent game state (data): '+JSON.stringify(gameReceipt(this.session.state.playroom)):liveInstructions+'\n'+studioInstructions+'\n'+workflowInstructions+'\n'+functionInstructions+'\nCustom function requests go through the assistant delegation tool; do not speak code. It may take a moment to build and test. Explain limitations naturally, and only claim a function was saved after the tool confirms it.';
-    a.mirror=mirror;a.owner=owner;this.state.owner=owner;this.state.stopReason=null;this.state.device=mirror?'mirror':'mac';
+    a.mirror=mirror;a.owner=owner;a.resuming=resuming;this.state.owner=owner;this.state.stopReason=null;this.state.device=mirror?'mirror':'mac';
     this.state.muted = false; this.state.finishing=false;this.update('connecting','Connecting to GPT-Live-1');
     a.lease = setInterval(() => {
       const reason=Date.now()-a.started > 180000 ? 'duration_limit':wakeIdle(a,Date.now())?'idle_timeout':owner==='companion'&&Date.now()-a.lastBeat > 20000 ? 'lease_expired':null;
@@ -111,7 +117,7 @@ export class Voice {
       const close=()=>finish(Error('Mirror voice connection closed'));
       const finish=error=>{clearTimeout(timeout);a.ws.off('event',event);a.ws.socket.off('close',close);error?reject(error):resolve();};
       a.ws.on('event',event);a.ws.socket.on('close',close);
-      a.ws.send({type:'session.start',session:{model:'gpt-live-1',store:false,audio:{format:{type:'audio/pcm',rate:16000},output:{voice:'marin'}},delegation:{type:'client'},instructions:a.instructions+(a.owner==='wake'?wakeInstructions:'')}});
+      a.ws.send({type:'session.start',session:{model:'gpt-live-1',store:false,audio:{format:{type:'audio/pcm',rate:16000},output:{voice:'marin'}},delegation:{type:'client'},instructions:a.instructions+(a.owner==='wake'?wakeInstructions:'')+(a.resuming?'\nThis session resumes a completed background task, not a new user request. Stay silent until the application supplies its verified completion receipt. Briefly announce that result without delegating or repeating the work, then listen for follow-up.':'')}});
     });
     if(a.closing)throw Error('Connection cancelled');
     a.mirror.on('audio',a.onAudio);a.mirror.start();a.mirrorStarted=true;a.lastBeat=Date.now();a.readyAt=Date.now();
@@ -307,19 +313,22 @@ export class Voice {
   async runAssistant(a) {
     const id=a.pending,from=a.cursor,to=a.transcript.length;
     const text=a.refinedText||a.transcript.slice(from,to).map(t=>t.text).join('');a.refinedText=null;
-    const job=a.job={controller:new AbortController(),id,to,text};
+    const job=a.job={controller:new AbortController(),id,to,text,origin:a,backgroundEligible:!!a.mirror&&!a.playroom,announce:!this.state.muted};
+    this.jobs.add(job);this.backgroundState();
     const beforeCommit=async()=>{
       while(job.inputGate&&!job.controller.signal.aborted)await job.inputGate;
-      if(job.controller.signal.aborted||a.job!==job||a.closing)throw Error('Request cancelled');
+      if(job.controller.signal.aborted||!this.jobs.has(job)||(!job.detached&&(a.job!==job||a.closing)))throw Error('Request cancelled');
     };
     const workTrace=a.workTrace;
-    const progress=trackTaskProgress({signal:job.controller.signal,lastSpeech:()=>a.lastOutput,
+    const progress=trackTaskProgress({signal:job.controller.signal,lastSpeech:()=>a.lastOutput,background:job.backgroundEligible,
       isCurrent:()=>a.job===job&&!job.inputGate&&!a.closing&&a===this.active,
       send:content=>{try{if(this.reply(a,job.id,content))workTrace?.event('waiting.acknowledgment',{since_last_fragment_ms:Date.now()-a.lastInput});}catch{/* Progress must not fail the action. */}}});
     try {
       const result=await this.assistant.execute(a.token+':'+id+':'+to,text,{signal:job.controller.signal,trace:workTrace,onProgress:progress.update,beforeCommit});
       if(job.inputGate)await beforeCommit();
-      if(a.job!==job||job.controller.signal.aborted||a.closing||a!==this.active)return;
+      if(job.controller.signal.aborted||!this.jobs.has(job))return;
+      if(job.detached){this.queueAnnouncement(job,result);return;}
+      if(a.job!==job||a.closing||a!==this.active)return;
       a.cursor=job.to;a.pending=null;a.job=null;
       workTrace?.end({outcome:result.status});a.workTrace=null;
       a.toolFinishedAt=Date.now();if(this.deliverResult(a,job.id,result))return;
@@ -328,15 +337,74 @@ export class Voice {
       // Do not report failure over a correction that is still being spoken.
       if(job.inputGate&&!job.controller.signal.aborted)try{await beforeCommit();}catch{}
       workTrace?.end({outcome:job.controller.signal.aborted?'cancelled':'error',error_code:error?.code||'tool_failed'});
+      if(job.controller.signal.aborted||!this.jobs.has(job))return;
+      if(job.detached){this.queueAnnouncement(job,{status:'needs_input',message:assistantFailureMessage(error)});return;}
       if(a.job!==job||a.closing||a!==this.active)return;
       a.cursor=job.to;a.pending=null;a.job=null;a.workTrace=null;
       const message=assistantFailureMessage(error);
       this.reply(a,job.id,message);this.update('needs_input',message);
-    }finally{progress.stop();}
+    }finally{progress.stop();this.jobs.delete(job);this.backgroundState();}
   }
   reply(a,id,content) {
-    if (!a.closing && a.ws?.socket.readyState === 1) {a.ws.send({type:'session.commentary.append',delegation_id:id,content});return true;}
+    if (!a.closing && a.ws?.socket.readyState === 1) {a.ws.send({type:'session.commentary.append',delegation_id:id,content});a.responsePendingAt=Date.now();return true;}
     return false;
+  }
+  backgroundState(){
+    this.state.background={running:[...this.jobs].filter(j=>!j.controller.signal.aborted).length,waitingToAnnounce:this.announcements.length};
+    this.publish(this.state);
+  }
+  suppressBackground({cancel=false}={}){
+    ++this.announcementEpoch;clearTimeout(this.announcementTimer);
+    for(const job of this.jobs){job.announce=false;if(cancel)job.controller.abort();}
+    this.announcements=[];this.backgroundState();
+  }
+  queueAnnouncement(job,result){
+    job.workTrace?.end({outcome:result.status});
+    if(!job.announce||job.controller.signal.aborted)return;
+    this.announcements.push({job,result,epoch:this.announcementEpoch,expiresAt:Date.now()+300000});
+    this.backgroundState();this.scheduleAnnouncements();
+  }
+  scheduleAnnouncements(){
+    clearTimeout(this.announcementTimer);
+    if(this.announcements.length)this.announcementTimer=setTimeout(()=>void this.announceBackground(),250);
+  }
+  async announceBackground(){
+    if(this.announcing)return;
+    const item=this.announcements[0];if(!item)return;
+    if(item.epoch!==this.announcementEpoch||Date.now()>=item.expiresAt||this.blocked){
+      this.announcements.shift();this.backgroundState();this.scheduleAnnouncements();return;
+    }
+    let a=this.active;
+    // A live conversation owns its turn. Never cut off speech, games, or work.
+    if(a&&(a.closing||!a.readyAt||a.playroom||a.finishing||a.pending||a.job||this.state.muted||a.mirror?.status().playing||Date.now()-Math.max(a.lastInput,a.lastOutput,a.lastAudible||0,a.responsePendingAt||0)<3000)){
+      this.scheduleAnnouncements();return;
+    }
+    this.announcing=true;
+    try{
+      if(!a){
+        // One reconnect attempt, through the wake/audio owner. No provider ID
+        // from the old session is ever sent to this new session.
+        const opened=await this.resumeBackground?.(item.job.origin);
+        if(!opened)return;
+        a=this.active;
+      }
+      if(!a||a.closing||this.state.muted||item.epoch!==this.announcementEpoch||Date.now()>=item.expiresAt)return;
+      const content=JSON.stringify({kind:'background_result',request:item.job.text,result:item.result,
+        guidance:'This is a completed earlier request, not a new command. Briefly announce the verified result or failure, then listen. Do not delegate or rerun it. Do not claim an older result is currently visible if the display has since changed.'});
+      if(this.reply(a,null,content))a.trace.event('background.announced',{outcome:item.result.status});
+    }catch{
+      // Fail closed: budget, transport and missing final usage remain enforced.
+      this.telemetry.start('voice.background').end({outcome:'error',error_code:'startup_failed'});
+    }finally{
+      const index=this.announcements.indexOf(item);if(index>=0)this.announcements.splice(index,1);
+      this.announcing=false;this.backgroundState();this.scheduleAnnouncements();
+    }
+  }
+  mute(token,muted){
+    const a=this.active;if(!a||a.token!==token||a.closing||a.finishing)return false;
+    this.state.muted=!!muted;if(muted)this.suppressBackground();
+    a.mirror?.mute(!!muted);a.ws?.send({type:muted?'session.input_audio.mute':'session.input_audio.unmute'});
+    this.update(muted?'muted':'listening',muted?'Microphone muted':'');return true;
   }
   deliverResult(a,id,result){
     const game=result.game;
@@ -380,7 +448,10 @@ export class Voice {
       if(!a.mirror){a.finishing.speaking=!!speaking;if(speaking){a.finishing.heard=true;a.finishing.lastSound=Date.now();if(this.state.phase!=='speaking')this.update('speaking','Finishing the game · microphone input muted');}}
       return true;
     }
+    if(muted&&!this.state.muted)this.suppressBackground();
     this.state.muted = !!muted;
+    if(ready&&!a.readyAt)a.readyAt=Date.now();
+    if(speaking)a.lastAudible=Date.now();
     if(ready&&!a.readyReported){a.readyReported=true;a.trace.event('heartbeat.ready',{ready:true});}
     if(speaking&&a.toolFinishedAt){a.trace.event('playback.detected',{since_tool_ms:Date.now()-a.toolFinishedAt});a.toolFinishedAt=null;}
     if (ready && !a.pending) this.update(speaking ? 'speaking' : muted ? 'muted' : this.state.phase==='needs_input' ? 'needs_input':'listening',
@@ -394,9 +465,15 @@ export class Voice {
     }
   }
   async stop(token,reason='user') {
-    const a = this.active; if (!a || (token && token !== a.token)) return;
+    const a = this.active;if(token&&token!==a?.token)return;
+    if(!['idle_timeout','duration_limit'].includes(reason))this.suppressBackground({cancel:true});
+    if(!a)return;
     if (a.closing) return a.stopping;
     clearTimeout(a.speechTimer);clearInterval(a.finishTimer);
+    if(['idle_timeout','duration_limit'].includes(reason)&&a.job?.backgroundEligible&&!a.job.inputGate){
+      const job=a.job;job.detached=true;job.workTrace=a.workTrace;
+      a.trace.event('background.detached');a.cursor=job.to;a.job=null;a.pending=null;a.workTrace=null;
+    }
     a.closing = true;this.state.stopReason=reason; a.mirror?.stop(); a.job?.controller.abort(); clearTimeout(a.endTimer);clearTimeout(a.work); clearTimeout(a.fastWork); clearInterval(a.lease); this.update('stopping','Closing voice session');
     a.workTrace?.end({outcome:'cancelled'});a.workTrace=null;
     a.closeTrace=this.telemetry.start('voice.close',{reason},a.trace);

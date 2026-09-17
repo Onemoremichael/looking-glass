@@ -37,6 +37,11 @@ stay visible across panels. The mirror has a small active-conversation indicator
 hidden when capture is off, with a static label during local wake standby. Setup controls remain on the companion. A lost display
 connection still shows a stale-data warning.
 
+Native Mirror voice can close after 10 seconds of inactivity while delegated work
+continues, then announce its result in an existing quiet conversation or one new
+voice session. End cancels; mute suppresses automatic announcements. This is
+in-process background work, not restart-durable execution. See [voice lifecycle](docs/VOICE.md#background-task--voice-separation-september-17).
+
 ## Working now
 
 - Local clock, timers with absolute deadlines, and a to-do list.

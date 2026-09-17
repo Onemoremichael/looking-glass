@@ -154,8 +154,13 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
           try { if(localPlayroom.active)throw Error('Stop local game audio first');if(wake.state.enabled)throw Error('Turn off wake listening before starting a manual conversation');if(body.device==='mirror'&&!mirrorAudio)throw Error('Mirror audio is unavailable');return json(201,await voice.start(body.sdp,body.device==='mirror'?mirrorAudio:null)); }
           catch (e) { return json(409,{error:e.message}); }
         }
+        if(path==='/api/voice/background/stop'){
+          voice.suppressBackground({cancel:true});
+          if(voice.active?.resuming)await voice.stop(undefined,'user');
+          return json(200,voice.state);
+        }
         if (!voice.active || body.token!==voice.active.token) return json(409,{error:'No matching active session'});
-        if(path==='/api/voice/mute'&&voice.active.mirror){if(voice.active.finishing)return json(409,{error:'The game is finishing; start a new game after it closes.'});voice.active.mirror.mute(!!body.muted);return json(200,{ok:true});}
+        if(path==='/api/voice/mute'&&voice.active.mirror){if(voice.active.finishing)return json(409,{error:'The game is finishing; start a new game after it closes.'});return json(200,{ok:voice.mute(body.token,!!body.muted)});}
         if (path==='/api/voice/heartbeat') return json(200,{ok:voice.heartbeat(body.token,body)});
         if (path==='/api/voice/stop') { await voice.stop(body.token); return json(200,voice.state); }
         return json(404,{error:'Unknown voice operation'});
