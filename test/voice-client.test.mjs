@@ -31,6 +31,12 @@ function fixture(t,{microphone,answer,fetcher,resume,meterFails=false}={}){
   });
   return {el,posts,logs,track,stream,listeners,contexts,activity,peers};
 }
+test('End remains available while voice is off but a background request is running',async t=>{
+  const f=fixture(t);await flush();
+  f.listeners['glass-voice']({detail:{phase:'off',owner:'wake',background:{running:1,waitingToAnnounce:0}}});
+  assert.equal(f.el('voice-stop').disabled,false);assert.match(f.el('voice-status').textContent,/background task running/);
+  f.el('voice-stop').onclick();await flush();assert.ok(f.posts.includes('/api/voice/background/stop'));
+});
 test('game farewell releases browser input, retains playback, disables unmute and allows immediate stop',async t=>{
   const f=fixture(t);await f.el('voice-start').onclick();
   f.listeners['glass-voice']({detail:{phase:'speaking',finishing:true,muted:true,detail:'Finishing the game'}});

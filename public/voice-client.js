@@ -7,6 +7,7 @@ const audio = document.getElementById('voice-audio');
 const device = document.getElementById('voice-device');
 let run = null;
 let wakeState={enabled:false},serverVoice={phase:'off'};
+function backgroundPending(){return !!(serverVoice.background?.running||serverVoice.background?.waitingToAnnounce);}
 const wakeEnable=document.getElementById('wake-enable'),wakeTest=document.getElementById('wake-test'),wakeDisable=document.getElementById('wake-disable');
 async function wakePost(action,body={}){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
@@ -165,7 +166,10 @@ start.onclick=async()=>{
     release(r);if(ownsUI)paint('error',detail);
   }
 };
-stop.onclick=()=>{if(!run&&serverVoice.owner==='wake')void wakeClick('end');else void end();};
+stop.onclick=()=>{
+  if(!run&&['off','error'].includes(serverVoice.phase)&&backgroundPending())void post('background/stop',{}).catch(e=>paint('error',e.message));
+  else if(!run&&serverVoice.owner==='wake')void wakeClick('end');else void end();
+};
 mute.onclick=()=>{
   const r=run;if(!r?.ready || r.closing || r.finishing)return;
   if(r.mirror){
@@ -185,7 +189,8 @@ window.addEventListener('glass-voice',e=>{
   if(!run){
     const elsewhere=!['off','error'].includes(state.phase);
     start.disabled=elsewhere||!!wakeState.enabled;
-    stop.disabled=!(elsewhere&&state.owner==='wake');
+    stop.disabled=!(elsewhere&&state.owner==='wake')&&!backgroundPending();
+    if(!elsewhere&&backgroundPending()){paint(state.phase,'Voice off · background task '+(state.background.running?'running':'ready to announce'));return;}
     if(!elsewhere&&wakeState.enabled)return; // renderWake already reports the precise local capture state.
     else paint(elsewhere&&state.owner!=='wake'?'off':state.phase,elsewhere&&state.owner!=='wake'?'Conversation active in another companion tab. Use that tab to end it.':state.detail);
     return;
@@ -196,7 +201,7 @@ window.addEventListener('glass-voice',e=>{
     run.stream?.getTracks().forEach(t=>t.stop());
   }
   paint(state.phase,state.detail);
-  if(run?.token&&state.phase==='off'){run.closing=true;release(run);}
+  if(run?.token&&state.phase==='off'){run.closing=true;release(run);stop.disabled=!backgroundPending();}
   else if(run&&state.phase==='error')void end();
 });
 window.addEventListener('pagehide',()=>{

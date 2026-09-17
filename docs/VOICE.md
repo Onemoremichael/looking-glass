@@ -22,6 +22,9 @@ For delegated work, the shared progress tracker can send factual stage context a
 1.8 seconds and a delayed-work update at 10 seconds. Suppress a cue within 2.5 seconds
 of existing assistant speech, rather than suppressing all later updates after a
 single acknowledgment. Live chooses warm, concise wording suited to the actual state.
+Native Mirror tasks instead get one early background-capable cue, without the
+10-second filler update keeping audio open. The cue explains that completion can
+be announced later. See the background lifecycle below.
 No startup filler, repeated narration, invented ETA, premature success, unsupported
 “first time” story, or guaranteed speedup. Completion/correction/stop clears timers.
 See [adaptive views](ADAPTIVE-VIEWS.md) for rendering and explicit save consent. Official
@@ -46,8 +49,8 @@ one” can resolve against the active card. Display-dependent selections require
 visible render report; ambiguous or stale references must not silently guess.
 
 Weather now uses the cached Open-Meteo adapter (see [WEATHER.md](WEATHER.md)); calendar
-remains an unconnected placeholder. No research, account access, scheduled
-reminders or durable background jobs. Timer alerts are visual only, not safety-critical
+remains an unconnected placeholder. Live web research is supported. Account access,
+scheduled reminders and restart-durable background execution are not. Timer alerts are visual only, not safety-critical
 alarms. Pause/resume, audible alarms, list text editing, overflow paging and real Back
 history remain gaps. Going Back/Home or dismissing a panel does not cancel timers.
 
@@ -103,8 +106,9 @@ extend this speculative shortcut to consequential tools. Speech recognition mist
 and pauses still require human evaluation.
 
 Operation receipts persist atomically with state (last 500); duplicate deliveries do
-not repeat mutations. There is no automatic inference retry or reconnect. Pending
-work is not a durable background task. Full natural-speech turn-taking still needs
+not repeat mutations. There is no automatic inference retry. Native Mirror completion
+can open one new voice session as described below; it never repeats the agent task.
+Pending work is not restart-durable. Full natural-speech turn-taking still needs
 human evaluation before introducing consequential tools.
 
 States: off → connecting → listening; thinking during delegated work; speaking based
@@ -178,12 +182,15 @@ failure guards and recovery. Unrelated account usage is not visible to this ledg
 Live has a three-minute limit. Manual sessions have an approximately 20-second
 missing-companion-heartbeat watchdog. Explicitly armed wake sessions are server-owned,
 with a 10-second conversational idle timeout and standalone spoken end commands.
+Native manual Mirror sessions also use this idle timeout; browser WebRTC retains
+its existing heartbeat lifecycle and does not automatically reopen capture.
 Graceful closure waits for final usage; missing usage retains its reservation and
 blocks further Live sessions in that process. Hangup is attempted on failure. A killed
 server cannot guarantee cleanup: end conversations before stopping it.
 
 Audio goes to OpenAI only after manual Start (and browser permission in Mac mode)
-or a detected wake phrase while explicitly armed. Standby audio stays local. Delegated requests send
+or a detected wake phrase while explicitly armed, or a permitted one-time background
+completion reconnect on the native Mirror. Standby audio stays local. Delegated requests send
 app state, recent request/result history and surface context for planning. Camera is
 never requested; no local audio files are written. Owner-approved local transcript
 text logging is enabled during testing; external telemetry stays off. See
@@ -191,6 +198,46 @@ text logging is enabled during testing; external telemetry stays off. See
 Agents sessions are deleted after completion, neither implying zero provider retention.
 In-memory Live transcripts clear on cleanup; recent assistant history, cards and
 receipts persist in ignored app state and are shared on trusted local surfaces.
+
+## Background task / voice separation (September 17)
+
+- A native Mirror assistant task belongs to the application, not the audio socket.
+  After 10 seconds without conversational input/output (including actual playback),
+  close and finalize Live usage while the agent continues. Unsettled corrections and
+  game turns do not detach. The three-minute voice cap can also release an eligible task.
+- Work commits through the same cancellation, receipt and state-revision guards.
+  A changed display revision can reject the older task; background mode does not
+  authorize stale writes. Success, clarification and failure all produce receipts.
+- Once ready, use an existing quiet conversation, or open **one** native Live session
+  after the prior session has finalized usage. Send the receipt as application-owned
+  commentary with `delegation_id: null`, not an old provider delegation ID. Keep
+  `gpt-live-1` / `marin`. Never rerun inference just to announce a result.
+- Wait at least three quiet seconds before inserting a result into another active
+  conversation, and never during a game, pending turn, mute or native playback.
+  A delivered receipt grants a fresh response window, fixing immediate idle closure
+  before a failure can be explained. Commentary acceptance is not proof of audibility.
+- Explicit End, spoken end/stop-listening, background End or shutdown cancels pending
+  work and suppresses announcements. Mute suppresses announcements for current work
+  but permits silent completion; unmute does not resurrect them. The companion's End
+  control remains available while voice is off and background work is pending.
+- Wake-origin completions require the original arming still enabled, unexpired and
+  below its 10-session limit. Disarm/rearm does not revive old announcements. Manual
+  native Mirror work can reconnect once without enabling wake standby. No browser
+  permission bypass, new microphone on server startup, or automatic paid retry.
+- Queued announcements expire after five minutes. Disconnection, failed startup,
+  exhausted allowance or unknown final usage fail closed. The existing $25 allowance
+  and agent deadlines still apply. Jobs/announcement queues are in memory only:
+  shutdown cancels them; a crash does not resume them. Separate image/workflow jobs
+  keep their existing lifecycle; this change covers awaited assistant delegations.
+- `voice.background`, `background.detached` and `background.announced` provide
+  lifecycle evidence without exporting request text. `/api/voice` exposes only
+  counts for running work and queued announcements, not internal job identifiers.
+
+Deterministic tests cover timeout → completion/failure → reconnect, final-usage
+gating, completion during closure, overlap, stale commits, stop/mute/disarm races,
+expiry, manual Mirror behavior and one-attempt startup. Real spoken background
+completion acceptance remains a follow-up; the original stadium research exception
+is not diagnosed or fixed by this lifecycle change.
 
 ## Verification
 

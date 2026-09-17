@@ -41,13 +41,16 @@ the companion's off button is always the fallback.
 - Disabled by default, not persisted, never automatically rearmed after restart,
   model failure, audio stall, USB disconnect, unexpected Live closure or startup
   failure. No automatic paid retries.
-- Explicit arming lasts at most **30 minutes / 10 detections**, including test mode.
+- Explicit arming lasts at most **30 minutes / 10 sessions**, including detections,
+  test mode and background-completion reconnects.
   Reloading/closing the companion does not disable it; it is server-owned. The
   control page explains this and retrieves current state when reopened.
 - Each paid session retains the **three-minute absolute cap** and budget reservation.
-  **10 seconds of conversational inactivity** ends a wake session. Ongoing
-  delegated work, input/output transcript activity and actual non-silent playback
-  prevent the idle timeout, but not the absolute cap. This is a heuristic, not VAD.
+  **10 seconds of conversational inactivity** ends a wake session. Eligible delegated
+  work continues independently; completion can reconnect once, still within the
+  original arming and budget. Input/output activity, actual playback and unsettled
+  corrections prevent idle timeout, but not the absolute cap. This is a heuristic,
+  not VAD. See [background voice lifecycle](VOICE.md#background-task--voice-separation-september-17).
 - Manual sessions still use the existing 20-second companion heartbeat lease.
   Wake-owned sessions explicitly use the server lifecycle; native ping packets
   do not masquerade as browser heartbeats. Manual Start is excluded while armed.

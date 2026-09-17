@@ -15,6 +15,7 @@ export class Wake {
   constructor({voice,mirror,detectorFactory=()=>new WakeDetector(),publish=()=>{},now=Date.now}){
     Object.assign(this,{voice,mirror,detectorFactory,publish,now});
     this.state={enabled:false,phase:'off',phrase:'Hey Mirror',count:0};this.generation=0;
+    voice.resumeBackground=origin=>this.resumeBackground(origin);
     this.audio=pcm=>{if(this.state.phase==='standby'){try{this.detector.feed(pcm);}catch{void this.disable('detector_error');}}};
     this.disconnected=()=>void this.disable('mirror_disconnected');
     mirror?.on('standby-audio',this.audio);mirror?.on('disconnect',this.disconnected);mirror?.on('fault',this.disconnected);
@@ -52,6 +53,27 @@ export class Wake {
       this.update({phase:'conversation'});
     }catch{if(generation===this.generation)await this.disable('startup_failed');}
   }
+  async resumeBackground(origin){
+    if(this.voice.active)return !this.voice.active.closing;
+    if(this.voice.blocked||!this.mirror?.status().connected)return false;
+    const armed=this.state.enabled;
+    // Wake-origin work never opens a microphone after disarm/expiry. Manual
+    // Mirror work may announce once without enabling an always-listening mode.
+    if(origin.owner==='wake'&&(!armed||this.state.test||this.now()>=this.state.expiresAt||this.state.count>=10))return false;
+    if(armed&&(this.state.test||this.state.phase==='connecting'))return false;
+    const generation=this.generation;
+    if(armed)this.update({phase:'connecting',count:this.state.count+1});
+    try{
+      this.mirror.connecting();this.detector?.reset();
+      await this.voice.start(null,this.mirror,{owner:'wake',resuming:true});
+      if(generation!==this.generation){await this.voice.stop(undefined,'wake_disabled');return false;}
+      if(armed)this.update({phase:'conversation'});
+      return true;
+    }catch{
+      if(armed&&generation===this.generation)await this.disable('startup_failed');
+      return false;
+    }
+  }
   tick(){
     if(!this.state.enabled)return;
     if(this.now()>=this.state.expiresAt){void this.disable('arming_expired');return;}
@@ -70,6 +92,7 @@ export class Wake {
     }
   }
   async disable(reason='user'){
+    this.voice.suppressBackground?.({cancel:['user','shutdown','spoken_disable'].includes(reason)});
     ++this.generation;clearInterval(this.timer);clearTimeout(this.cueTimer);this.detector?.close();
     this.update({enabled:false,phase:'off',reason,expiresAt:null});
     if(this.voice.active?.owner==='wake')await this.voice.stop(undefined,'wake_disabled');

@@ -28,6 +28,9 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    PNG delivery. Observer failures no longer break jobs. Unsettled usage blocks
    further image spend across restart, and shutdown preserves completed work.
    175 offline tests pass; no new paid calls or provider-access claims.
+   **September 17 owner acceptance:** the cat image rendered successfully through
+   the real image flow; the owner confirmed it worked great. This supersedes the
+   earlier provider-access-pending note for generation, not image editing.
 3. **Playroom** — adult-rehearsal foundation implemented: four generated animal
    assets, conservative answer judgment with uncertainty, retry/hint/skip state,
    bounded bear choices and audio-reactive animation. Hardware animal display was
@@ -118,6 +121,13 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    recorded usage estimates rather than flat reservations when evidence permits.
    Wake standby restored on the connected mirror. No automatic paid test or
    credit purchase; provider estimates are not final billing.
+   **Background voice lifecycle:** native Mirror idle closes paid audio without
+   cancelling delegated work; a completion/failure can announce once through a
+   fresh session or an existing quiet conversation. Stop/mute/disarm, final usage,
+   arming, stale writes and single-attempt startup are guarded. Deterministic
+   lifecycle tests pass; real spoken reconnect acceptance remains pending. The
+   reported stadium request failed before this change; its underlying research
+   error is separate from the fixed premature voice closure.
 
 After each pass: update docs with evidence and limitations, commit, push, merge.
 Owner's closure instruction: finish the functionality already in flight, then
