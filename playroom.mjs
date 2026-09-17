@@ -1,31 +1,43 @@
-import {randomUUID} from 'node:crypto';
+import {randomUUID,randomInt} from 'node:crypto';
 
 export const animals=[
   {id:'elephant',name:'elephant',hint:'Look at that long trunk!',aliases:['elephant','elephants','an elephant','a elephant']},
   {id:'giraffe',name:'giraffe',hint:'Look at that very long neck!',aliases:['giraffe','giraffes','a giraffe']},
   {id:'penguin',name:'penguin',hint:'This bird has flippers and likes to swim.',aliases:['penguin','penguins','a penguin']},
   {id:'bear',name:'bear',hint:'Round ears and big paws!',aliases:['bear','bears','a bear','teddy bear','a teddy bear']},
+  {id:'dog',name:'dog',hint:'Floppy ears and a wagging tail. This friend says woof!',aliases:['dog','dogs','doggy','doggie','puppy','puppies']},
+  {id:'cat',name:'cat',hint:'Pointy ears and long whiskers. This friend says meow!',aliases:['cat','cats','kitty','kitten','kittens','kitty cat']},
+  {id:'duck',name:'duck',hint:'A wide bill and webbed feet. This friend says quack!',aliases:['duck','ducks','ducky','duckie','duckling','ducklings']},
 ];
+export const animalDecks=Object.freeze({classic:Object.freeze(['elephant','giraffe','penguin','bear']),familiar:Object.freeze(['dog','cat','duck','bear']),mixed:Object.freeze(animals.map(a=>a.id))});
+export function gameCards(game){return game.cards||animalDecks.classic;}
+const animalFor=game=>animals.find(a=>a.id===gameCards(game)[game.index]);
+function shuffled(cards){const copy=[...cards];for(let i=copy.length-1;i>0;i--){const j=randomInt(i+1);[copy[i],copy[j]]=[copy[j],copy[i]];}return copy;}
 const norm=s=>s.toLowerCase().replace(/[’']/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 const choices=[
   {prompt:'I’m Pip, a pretend story bear! Shall we visit the forest, the ocean, or the moon?',options:['forest','ocean','moon']},
   {prompt:'What shall we bring: a picnic, a kite, or a drum?',options:['picnic','kite','drum']},
   {prompt:'Let’s make a silly sound together. Shall we hum, roar, or squeak?',options:['hum','roar','squeak']},
 ];
-export function newGame(kind){
+export function newGame(kind,settings={}){
   if(!['animals','bear'].includes(kind))throw Error('Unknown game');
+  if(!settings||typeof settings!=='object'||Array.isArray(settings)||Object.keys(settings).some(k=>!['deck','shuffle'].includes(k)))throw Error('Invalid game settings');
+  const {deck='classic',shuffle=false}=settings;
+  if(!Object.hasOwn(animalDecks,deck)||typeof shuffle!=='boolean')throw Error('Invalid animal deck settings');
   return {id:randomUUID(),kind,turn:0,index:0,phase:'playing',rehearsal:true,feedback:null,found:0,choices:[],
+    ...(kind==='animals'?{deckId:deck,shuffle,cards:shuffle?shuffled(animalDecks[deck]):[...animalDecks[deck]],lastAnimal:null}:{}),
     prompt:kind==='animals'?'What animal do you see?':choices[0].prompt,
     options:kind==='bear'?choices[0].options:[]};
 }
 export function gameView(game){
   if(!game)return null;
-  return {...game,animal:game.kind==='animals'&&game.phase!=='complete'?animals[game.index]?.id:null,total:animals.length};
+  return {...game,animal:game.kind==='animals'&&game.phase!=='complete'?animalFor(game)?.id:null,total:game.kind==='animals'?gameCards(game).length:choices.length};
 }
 // Only verified engine state enters the voice context, never raw user speech.
 export function gameReceipt(game){
   return {gameId:game.id,kind:game.kind,turn:game.turn,phase:game.phase,feedback:game.feedback,
-    completed:game.index,total:game.kind==='animals'?animals.length:choices.length,
+    completed:game.index,total:game.kind==='animals'?gameCards(game).length:choices.length,
+    ...(game.kind==='animals'?{displayedAnimal:game.phase==='complete'?null:animalFor(game)?.id,previousAnimal:game.lastAnimal||null}:{}),
     choices:[...game.choices],options:[...game.options],prompt:game.prompt};
 }
 export function gameIntent(text,state){
@@ -36,29 +48,31 @@ export function gameIntent(text,state){
 // wrong answer, trigger an app action, or silently advance a card.
 export function advanceGame(game,text){
   if(typeof text!=='string'||!text.trim()||text.length>4000)throw Error('Invalid game answer');
-  const s=norm(text),answer=s.replace(/^(?:i think (?:it is |its )?|it is |its |thats |that is )/,'');
+  const s=norm(text),answer=s.replace(/^(?:i think (?:it is |its )?|i see |it is |its |thats |that is )/,'');
   game.turn++;
   if(/^(?:stop|stop the game|end the game|all done|im done|go home|quit)$/.test(s)){
-    game.phase='complete';game.feedback='finished';game.prompt='Thanks for playing! Ask your grown-up when you want to play again.';game.options=[];return game;
+    game.phase='complete';game.feedback='finished';if(game.kind==='animals')game.lastAnimal=null;game.prompt='Thanks for playing! Ask your grown-up when you want to play again.';game.options=[];return game;
   }
   if(/^(?:play again|again|restart|start over)$/.test(s)){
-    const fresh=newGame(game.kind);Object.assign(game,fresh);return game;
+    const fresh=newGame(game.kind,game.kind==='animals'?{deck:game.deckId||'classic',shuffle:game.shuffle===true}:{});Object.assign(game,fresh);return game;
   }
   if(game.phase==='complete'){game.prompt='All done! You can say play again, or ask your grown-up to finish.';return game;}
   if(game.kind==='animals'){
-    const card=animals[game.index];
-    const correct=card.aliases.includes(answer);
+    const card=animalFor(game),named=answer.replace(/^(?:a |an |the )/,'').replace(/ please$/,'');
+    const correct=card.aliases.includes(named);
+    game.lastAnimal=null;
     const skip=/^(?:skip|next|next one|next animal|i dont know|dont know|show me)$/.test(s);
     if(correct||skip){
       game.feedback=correct?'correct':'revealed';if(correct)game.found++;
+      game.lastAnimal=card.id;
       game.index++;
-      game.prompt=(correct?'Yes! An animal friend: ':'That one is a ')+card.name+'. ';
-      if(game.index>=animals.length){game.phase='complete';game.prompt+='We met all four animals! Thanks for playing. Ask your grown-up when you want to play again.';}
+      game.prompt=(correct?'Yes! That was ':'That one was ')+(card.id==='elephant'?'an ':'a ')+card.name+'. ';
+      if(game.index>=gameCards(game).length){game.phase='complete';game.prompt+='We met all '+gameCards(game).length+' animals! Thanks for playing. Ask your grown-up when you want to play again.';}
       else game.prompt+='Here’s the next one. What animal do you see?';
     }else if(/^(?:hint|a hint|help|help me|give me a hint)$/.test(s)){
       game.feedback='hint';game.prompt=card.hint+' What animal could it be?';
     }else{
-      const known=animals.some(a=>a.aliases.includes(answer))||/^(?:a |an )?(?:cat|dog|lion|tiger|zebra|monkey|cow|horse|duck|rabbit)$/.test(answer);
+      const known=animals.some(a=>a.aliases.includes(named))||/^(?:lion|tiger|zebra|monkey|cow|horse|rabbit)$/.test(named);
       game.feedback=known?'try_again':'uncertain';
       game.prompt=known?'Good try! '+card.hint+' Want to try again?':'I didn’t quite catch an animal name. Try once more, or say hint or skip.';
     }

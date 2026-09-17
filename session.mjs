@@ -59,10 +59,10 @@ export class Session {
     catch(error){this.state=before;throw error;}
     this.onChange(this.state);
   }
-  startPlayroom(kind){
+  startPlayroom(kind,settings){
     const before=structuredClone(this.state);
     try{
-      this.state.playroom=newGame(kind);this.state.panel='playroom';this.state.assistant=null;this.state.message='';
+      this.state.playroom=newGame(kind,settings);this.state.panel='playroom';this.state.assistant=null;this.state.message='';
       this.state.assistantHistory=[];this.state.revision++;this.save();
     }catch(error){this.state=before;throw error;}
     this.onChange(this.state);

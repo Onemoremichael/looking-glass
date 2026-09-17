@@ -6,7 +6,8 @@
   }
   Array.prototype.forEach.call(document.querySelectorAll('[data-playroom-start]'),function(el){el.addEventListener('click',function(){
     if(!document.getElementById('playroom-adult').checked){document.getElementById('playroom-control-status').textContent='Please acknowledge adult-only rehearsal first.';return;}
-    act({action:'start',kind:el.getAttribute('data-playroom-start'),adultRehearsal:true});
+    var kind=el.getAttribute('data-playroom-start');
+    act({action:'start',kind:kind,adultRehearsal:true,settings:kind==='animals'?{deck:document.getElementById('playroom-deck').value,shuffle:document.getElementById('playroom-shuffle').checked}:{}});
   });});
   document.getElementById('playroom-stop').addEventListener('click',function(){act({action:'stop'});});
   function local(action){

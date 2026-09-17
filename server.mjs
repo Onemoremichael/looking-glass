@@ -16,6 +16,7 @@ import {ImageStudio} from './image-studio.mjs';
 import {Workflows} from './workflows.mjs';
 import {CustomFunctions} from './custom-functions.mjs';
 import {LocalPlayroom} from './local-playroom.mjs';
+import {animals} from './playroom.mjs';
 
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
 const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png' };
@@ -25,7 +26,7 @@ Object.assign(files,{'/playroom-ui.js':'playroom-ui.js','/playroom.css':'playroo
 Object.assign(files,{'/studio-ui.js':'studio-ui.js','/studio.css':'studio.css','/studio-controls.js':'studio-controls.js'});
 Object.assign(files,{'/workflow-ui.js':'workflow-ui.js','/workflow.css':'workflow.css','/workflow-controls.js':'workflow-controls.js'});
 Object.assign(files,{'/function-ui.js':'function-ui.js','/function.css':'function.css','/function-controls.js':'function-controls.js'});
-for(const name of ['elephant','giraffe','penguin','bear'])files['/assets/playroom/'+name+'-v1.png']='assets/playroom/'+name+'-v1.png';
+for(const {id:name} of animals)files['/assets/playroom/'+name+'-v1.png']='assets/playroom/'+name+'-v1.png';
 for(const kind of ['cloud','sun','moon','rain','storm','snow','fog']){
   files['/assets/weather/'+kind+'-volume-v1.png']='assets/weather/'+kind+'-volume-v1.png';
 }
@@ -183,7 +184,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
             if(studio.active)throw Error('Finish or cancel image generation before entering rehearsal');
             if(workflows.active)throw Error('Pause the workflow before entering rehearsal');
             if(functions.active)throw Error('Wait for the function check before entering rehearsal');
-            session.startPlayroom(body.kind);
+            session.startPlayroom(body.kind,body.settings);
           }else throw Error('Adult-only rehearsal must be acknowledged; child deployment is not enabled');
           return json(200,{ok:true});
         }catch(e){return json(409,{error:e.message});}

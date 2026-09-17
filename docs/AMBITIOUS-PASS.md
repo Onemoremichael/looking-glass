@@ -51,6 +51,16 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    paths; 265 repository tests pass. The paid rehearsal script now requires automatic close and native capture
    release. No new API spend, paid session, physical audio test or allowance increase
    in this pass. Live sound quality and child readiness remain unverified.
+   **Animal-deck expansion:** seven curated illustrated cards now support short
+   familiar/classic and full mixed rounds with optional shuffle. Grading, renderer
+   and voice receipts agree on selected card order; a separate previous-animal
+   thumbnail makes the next-card handoff clearer. Whole-answer puppy/kitten/duckling
+   phrases work without accepting negation or background mentions. 286 offline
+   tests pass; native-browser controls, full seven-answer local rehearsal and
+   handoff/completion layouts verified. Three new transparent assets were generated
+   with the built-in image tool, not the app API. Rabbit output failed and is not
+   included. Physical/new-vocabulary speech and child acceptance remain pending;
+   no new app API spend or microphone capture.
 4. **Adaptable workflows** — implemented durable ordered plans, named inputs,
    background guarded step execution, tool/human completion evidence, resumable
    questions, cancellation and restart recovery. Plans auto-save; parameterized
