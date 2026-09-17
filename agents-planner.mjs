@@ -53,7 +53,7 @@ export class AgentsPlanner {
     if(signal?.aborted)throw Error('Request cancelled');
     const reservation=this.budget.reserve('agents-decision');
     const deadline=AbortSignal.timeout(this.timeoutMs),combined=signal?AbortSignal.any([signal,deadline]):deadline;
-    let stream,sessionId,complete=false,text='',usage,rejected=false,accepted=false;
+    let stream,sessionId,turnId,complete=false,text='',usage,rejected=false,accepted=false;
     const openedUrls=new Set();let searches=0;
     const evidence=this.lastResearchEvidence={calls:[],citedUrls:[]};
     const timing={planningMs:null,readyMs:null,cleanupMs:null,totalMs:null};this.lastTiming=timing;
@@ -74,7 +74,7 @@ export class AgentsPlanner {
           planning?.event('research.source_checked',{action:event.item.action?.type});
         }
         if(event.type==='agent.session.turn.output_text.done')text=event.text;
-        if(event.type==='agent.session.turn.completed'){complete=true;usage=event.usage;plannedAt=Date.now();break;}
+        if(event.type==='agent.session.turn.completed'){complete=true;usage=event.usage||event.turn?.usage;turnId=event.turn_id||event.turn?.id;plannedAt=Date.now();break;}
         if(['agent.session.turn.failed','agent.session.turn.cancelled','agent.session.failed','agent.session.requires_action','agent.session.error'].includes(event.type))throw Error('Agent could not produce a decision');
       }
       if(!complete||combined.aborted)throw Error('Agent decision interrupted');
@@ -108,8 +108,13 @@ export class AgentsPlanner {
       // Independent cleanup signal: an aborted user request still needs server cancellation.
       this.cleanup=(async()=>{
         let cleaned=rejected;
+        // Usage may arrive on the turn resource rather than its terminal event.
+        // One bounded read, before deletion, off the response's critical path.
+        if(complete&&!usage&&sessionId&&turnId&&this.client.beta.agents.sessions.turns?.retrieve){
+          try{const turn=await this.client.beta.agents.sessions.turns.retrieve(turnId,{session_id:sessionId},{signal:AbortSignal.timeout(5000),maxRetries:0});if(turn.status==='completed')usage=turn.usage;}catch{}
+        }
         if(sessionId)cleaned=(await closeAgentSession(this.client.beta.agents.sessions,sessionId,{complete})).cleaned;
-        this.budget.finishAgent(reservation,{complete,cleaned,usage});
+        this.budget.finishAgent(reservation,{complete,cleaned,usage,model:this.model,webSearchCalls:searches});
         timing.cleanupMs=Date.now()-cleanupStarted;timing.totalMs=Date.now()-started;
         cleanupTrace?.end({outcome:cleaned?'completed':'unconfirmed'});
       })();

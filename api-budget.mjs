@@ -4,6 +4,16 @@ import { randomUUID } from 'node:crypto';
 import {recoveryError} from './agent-recovery.mjs';
 
 // Shared with transport diagnostics. A reservation is an allowance, not billed spend.
+export function budgetAllocation(b){
+  const checkpoint=b.reconciliations?.at(-1),covered=new Set((checkpoint?.closedRunIds||[]).filter(id=>typeof id==='string'&&id));
+  if(checkpoint&&(!Number.isFinite(checkpoint.reportedUSD)||checkpoint.reportedUSD<0||!Array.isArray(checkpoint.closedRunIds)))throw Error('Invalid budget reconciliation');
+  return b.runs.reduce((sum,r)=>{
+    if(r.status==='closed'&&covered.has(r.id))return sum;
+    const amount=r.status==='closed'?r.estimatedUSD:r.reservedUSD;
+    if(!Number.isFinite(amount)||amount<0)throw Error('Invalid budget allocation');
+    return sum+amount;
+  },checkpoint?.reportedUSD||0);
+}
 export class ApiBudget {
   constructor(path) { this.path = path; }
   change(fn) {
@@ -22,10 +32,21 @@ export class ApiBudget {
   reserve(kind='live-webrtc') {
     return this.change(b => {
       if(kind==='agents-decision'&&b.runs.some(r=>r.kind===kind&&['pending','unconfirmed'].includes(r.status)))throw recoveryError();
-      const used = b.runs.reduce((sum, r) => sum + (r.status === 'closed' ? r.estimatedUSD : r.reservedUSD), 0);
+      const used = budgetAllocation(b);
       if (!Number.isFinite(used) || used + 0.5 > b.approvedUSD) throw Object.assign(Error('Test budget exhausted or invalid'),{code:'test_budget_exhausted'});
       const run = { id: randomUUID(), kind, startedAt: new Date().toISOString(), status: 'pending', reservedUSD: 0.5 };
       b.runs.push(run); return run.id;
+    });
+  }
+  // Explicit operator reconciliation only. Never infer a provider balance or
+  // silently zero unknown usage. Original runs and previous checkpoints remain.
+  reconcile({reportedUSD,evidence}){
+    if(!Number.isFinite(reportedUSD)||reportedUSD<0||typeof evidence!=='string'||!evidence.trim()||evidence.length>1000)throw Error('Reported spend and evidence required');
+    return this.change(b=>{
+      if(b.runs.some(r=>r.status==='pending'))throw Error('Finish pending requests before reconciling');
+      const checkpoint={at:new Date().toISOString(),reportedUSD,evidence,closedRunIds:b.runs.filter(r=>r.status==='closed'&&typeof r.id==='string'&&r.id).map(r=>r.id)};
+      b.reconciliations=[...(b.reconciliations||[]),checkpoint];
+      return {approvedUSD:b.approvedUSD,allocatedUSD:budgetAllocation(b)};
     });
   }
   unresolvedAgents(){
@@ -42,12 +63,23 @@ export class ApiBudget {
       if(cleaned){r.status='closed';r.cleaned=true;r.estimatedUSD=r.reservedUSD;}
     });
   }
-  finishAgent(id,{complete,cleaned,usage}) {
+  finishAgent(id,{complete,cleaned,usage,model,webSearchCalls}) {
     this.change(b=>{
       const r=b.runs.find(r=>r.id===id);if(!r||r.kind!=='agents-decision')throw Error('Unknown agent reservation');
-      // Retain the full allowance even on success: token usage is not a billing quote.
+      // Unknown/unfinished work retains its hold. Known usage is an estimate,
+      // not a provider bill; do not permanently count a reservation as spend.
       r.status=cleaned?'closed':'unconfirmed';r.estimatedUSD=r.reservedUSD;r.complete=complete;r.cleaned=cleaned;
-      if(usage&&Number.isFinite(usage.input_tokens)&&Number.isFinite(usage.output_tokens))r.tokens={input:usage.input_tokens,output:usage.output_tokens};
+      r.accountingBasis='reservation_hold';
+      if(usage&&Number.isSafeInteger(usage.input_tokens)&&usage.input_tokens>=0&&Number.isSafeInteger(usage.output_tokens)&&usage.output_tokens>=0){
+        r.tokens={input:usage.input_tokens,output:usage.output_tokens};
+        // Standard GPT-5.4-mini rates verified 2026-09-17. Count all input at
+        // uncached rates and every observed web call at $0.01 conservatively.
+        // No subagents/sandbox or other hosted tools are enabled in this planner.
+        if(complete&&cleaned&&model==='gpt-5.4-mini'&&Number.isSafeInteger(webSearchCalls)&&webSearchCalls>=0){
+          r.estimatedUSD=Math.ceil((usage.input_tokens*.75+usage.output_tokens*4.5+webSearchCalls*10000))/1e6;
+          r.accountingBasis='usage_estimate';r.model=model;r.webSearchCalls=webSearchCalls;r.pricingDate='2026-09-17';
+        }
+      }
     });
   }
   identifyAgent(id,sessionId) {

@@ -52,6 +52,9 @@ connection still shows a stale-data warning.
   “what about later in the week?” can take the local quick path while weather is shown.
   See [adaptive views and voice test flow](docs/ADAPTIVE-VIEWS.md).
 - State saved atomically to ignored `data/state.json`; restart preserves items.
+- Shared $25 test allowance distinguishes reservations from usage estimates.
+  Explicit dashboard-spend reconciliation preserves run history and unresolved
+  holds; it never raises the approved limit. See [accounting](docs/API-TESTING.md).
 - Request capture and an example clarification flow for Gators sports.
 - Live, read-only web research assembled into cited briefing, agenda, comparison,
   or step-by-step boards. Two large cards per short page; dense results use an

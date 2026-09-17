@@ -4,6 +4,7 @@ import { LiveWS } from 'openai/resources/live/ws';
 import { loadEnvFile } from 'node:process';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, openSync, closeSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import {budgetAllocation} from '../api-budget.mjs';
 
 if (!process.argv.includes('--paid-test')) throw new Error('Use --paid-test only within an approved test budget.');
 loadEnvFile(fileURLToPath(new URL('../.env', import.meta.url)));
@@ -20,7 +21,7 @@ try {
   catch (error) { if (error.code !== 'ENOENT') throw error; budget = { approvedUSD: 25, authorization: 'Owner approved $25 for this testing round in chat', runs: [] }; }
   if (budget.approvedUSD !== 25 || !Array.isArray(budget.runs)) throw new Error('Invalid budget record');
   if (budget.runs.some(r => r.status !== 'closed') && !process.argv.includes('--reviewed-retry')) throw new Error('An earlier test needs usage/finalization review before another paid run.');
-  const accounted = budget.runs.reduce((sum,r) => sum + (r.status === 'closed' ? r.estimatedUSD : r.reservedUSD), 0);
+  const accounted = budgetAllocation(budget);
   if (!Number.isFinite(accounted) || accounted + 0.25 > budget.approvedUSD) throw new Error('Test budget exhausted');
   const run = { startedAt: new Date().toISOString(), kind: 'live-handshake', reservedUSD: 0.25, status: 'pending' };
   budget.runs.push(run); persist(budget);
