@@ -3,6 +3,40 @@
 Owner approved **$25 total for this round of testing**, not $25 per run.
 Credentials stay in ignored `.env`. Never print the key or full authenticated errors.
 
+## Current accounting correction (2026-09-17)
+
+The owner reported about **$2** in the API dashboard while the app had allocated
+**$24.97001**. The discrepancy was principally 47 completed agent requests that
+each retained a $0.50 reservation ($23.50 total). Those were not billed costs.
+With owner approval, an append-only reconciliation checkpoint uses the reported
+$2 for covered completed runs. All original records remain; the two unconfirmed
+handshake holds still add $0.50. The $25 limit is unchanged. This is a user-reported
+baseline, not an independently verified bill or account balance.
+
+New completed, cleaned-up GPT-5.4-mini turns use recorded token usage plus observed
+web-search calls. Usage is read from the terminal event or its nested turn; when
+missing, one bounded turn retrieval happens before deletion, outside the response
+critical path. At standard rates checked September 17, input is estimated at
+$0.75/M (conservatively without cache discount), output at $4.50/M, plus $0.01 per
+observed web call. Unknown models, missing/invalid usage and incomplete cleanup
+retain their full reservation. Estimates can exceed their initial reservation.
+No old usage is invented or retroactively inferred from an average request.
+
+Reconciliation is an explicit operator action through `ApiBudget.reconcile`, not
+a public endpoint or automatic reset. It rejects pending requests, preserves
+unresolved holds and records the report/evidence and covered run IDs. Both runtime
+and handshake diagnostics use the shared allocation calculation. Full history
+and checkpoints remain in the ignored local ledger, never Git.
+
+Official guidance distinguishes best-effort usage from final billing:
+[Agents usage](https://developers.openai.com/api/docs/guides/agents-api/observability),
+[model rates](https://developers.openai.com/api/docs/models/gpt-5.4-mini),
+[tool rates](https://developers.openai.com/api/docs/pricing).
+The provider dashboard remains authoritative; the app's limiter is not a
+provider-side hard cap. Other model prices require explicit rate-card support.
+
+The following startup notes are historical, not current capability status.
+
 Initial read-only checks succeeded: GET model `gpt-live-1` and GET Agents API
 session listing both returned HTTP 200. This verifies model visibility and session
 read access, not end-to-end conversation or agent inference.

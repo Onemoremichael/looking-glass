@@ -167,7 +167,10 @@ No public/LAN paid voice endpoint is enabled.
 
 The existing $25 test allowance covers both transports and planning reservations.
 Each Live session reserves $0.50; final usage estimates use max(15, reported seconds)
-at $0.05/minute. Each planning call conservatively retains its full $0.50 allowance,
+at $0.05/minute. Planning reserves $0.50 up front; completed, cleaned-up supported
+model turns settle to recorded token/tool estimates. Unknown usage keeps its hold
+(see [reconciliation and current rates](API-TESTING.md)). Previously every planning
+call permanently retained the full $0.50 allowance,
 not a claim of actual model billing. Platform billing is authoritative; the ledger
 is not a provider-enforced account cap. See [ASSISTANT.md](ASSISTANT.md) for cleanup
 failure guards and recovery. Unrelated account usage is not visible to this ledger.

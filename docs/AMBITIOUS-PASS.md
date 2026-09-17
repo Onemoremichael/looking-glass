@@ -111,6 +111,13 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    remains pending. No new API spend or microphone capture in this pass.
 5. **Integration/polish** — pending: expectation-setting, timer language gaps,
    wake calibration, microphone/speaker replay, restart/reuse verification.
+   **Wake/accounting recovery:** wake detection worked but conversation startup
+   was blocked by completed agent reservations miscounted as spend. Owner-reported
+   $2 dashboard usage now has an auditable checkpoint; unresolved $0.50 stays held
+   and the original $25 limit is unchanged. New completed mini-model turns use
+   recorded usage estimates rather than flat reservations when evidence permits.
+   Wake standby restored on the connected mirror. No automatic paid test or
+   credit purchase; provider estimates are not final billing.
 
 After each pass: update docs with evidence and limitations, commit, push, merge.
 Owner's closure instruction: finish the functionality already in flight, then
