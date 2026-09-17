@@ -92,7 +92,9 @@ connection still shows a stale-data warning.
   is regression-tested; ledger settlement failures pause new generation. Provider access is still
   unverified; offline tests and physical-mirror fixture rendering pass. See
   [image workflow, budget accounting and limits](docs/IMAGE-STUDIO.md).
-- Adult-only playroom rehearsal: four illustrated animal cards and a bounded Pip
+- Adult-only playroom rehearsal: seven illustrated animal cards, selectable
+  four-card familiar/classic or seven-card mixed decks, optional shuffled rounds,
+  explicit previous-answer feedback and a bounded Pip
   bear adventure, with local game state and isolated GPT-Live/Marin voice instructions.
   GPT-Live remains the intended primary conversational experience.
   Verified game-turn receipts guide expressive replies; game completion now mutes

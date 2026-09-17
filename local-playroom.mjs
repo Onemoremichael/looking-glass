@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
-import {advanceGame} from './playroom.mjs';
+import {advanceGame,animals} from './playroom.mjs';
 import {LocalRecognizer,synthesizeGameSpeech} from './local-speech.mjs';
 
 export async function playLocalPCM(mirror,pcm,{signal}={}){
@@ -46,7 +46,7 @@ export class LocalPlayroom{
     const candidate=advanceGame(structuredClone(game),text);
     // Diagnostics expose classification/counts, never recognized words.
     this.state.lastRecognition={words:text.trim().split(/\s+/).length,feedback:candidate.feedback,
-      animalMention:/\b(?:elephant|giraffe|penguin|bear)\b/i.test(text)};
+      animalMention:animals.some(a=>new RegExp('\\b'+a.id+'\\b','i').test(text))};
     if(candidate.feedback==='uncertain'){
       // A short, answer-shaped utterance can ask for a retry, never earn credit.
       // Do not turn negation, ambiguity or unrelated conversation into answers.

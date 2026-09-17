@@ -6,7 +6,10 @@ tests until provider retention requirements and the child-safety review are met.
 
 ## Implemented
 
-- Four illustrated animal cards: elephant, giraffe, penguin and bear. Recognized
+- Seven illustrated animal cards: elephant, giraffe, penguin, bear, dog, cat and
+  duck. Familiar Friends uses dog/cat/duck/bear; Big Adventures retains the original
+  four; All Animal Friends uses seven. The companion defaults to a shuffled short
+  Familiar Friends round. Its checkbox can restore a fixed order. Recognized
   answers advance; known wrong answers receive a gentle hint. Ambiguous speech
   retries without marking an answer wrong. Hint, skip, stop and restart are supported.
 - Pip the bear: a bounded three-choice adventure with ordinal references such as
@@ -21,6 +24,44 @@ tests until provider retention requirements and the child-safety review are met.
   Starting a game alone does not start the microphone.
 
 See [artwork prompts and provenance](PLAYROOM-ART.md).
+
+### Decks and readable turn handoffs — September 16
+
+The engine stores each round's card IDs and order in ephemeral game state. All
+grading, progress, rendering and voice receipts use that order rather than a shared
+fixed index. Restart keeps the selected deck/shuffle setting but creates a new game
+ID; shuffling never duplicates or drops a card. The API's omitted settings retain
+the original ordered four-card deck so existing audio diagnostic scripts remain
+repeatable. Settings accept only a curated deck ID and boolean shuffle, not arbitrary
+asset paths, card content or unbounded round lengths. Game history still does not
+persist after app restart; the curated decks themselves are immediately reusable.
+
+Whole-answer forms include “I see a puppy”, “that's a kitten” and “a duckling”.
+Negation, multiple-animal answers and background sentences remain uncertain, not
+graded by substring. This expands the language vocabulary, **not** proof that ASR
+recognizes those words reliably. There is no score-based pressure or forced retry.
+
+After advancing, a small previous-animal thumbnail says “You found” or “We met”,
+while the large new image asks its own question. Receipts separately identify
+`previousAnimal` and `displayedAnimal`; completion has no displayed guessing card.
+The farewell uses the actual deck length, and the bear game reports three steps.
+The smaller transition illustration keeps the handoff within a 1280×720 browser
+viewport; the mirror remains output-only. Reduced-motion support remains intact.
+
+**Verification:** 286 tests pass, including seven deck tests covering all curated
+rounds, exact answer phrases/ambiguity, shuffle membership, restart, settings
+rollback, selected-order rendering, PNG serving/alpha and HTTP microphone-off
+entry. In the native browser, the companion started the seven-card deck; seven
+direct local test answers completed it. The dog card, next-card feedback and
+completion screen were visually inspected. This is not physical audio, child-speech
+or live GPT-Live acceptance. No application API calls were charged and no microphone
+was started. Three build-time images used the built-in image tool, separately from
+the app's paid API integration; rabbit generation failed and is not shipped.
+
+Run `node scripts/preview-playroom.mjs` for an isolated in-memory UI rehearsal at
+`http://localhost:8784/remote`. It starts an ordered Familiar Friends round and
+never connects hardware or enables audio. Use the production companion only after
+stopping that fixture if comparing the two.
 
 ## Primary voice: GPT-Live / Marin
 
