@@ -19,9 +19,9 @@ import {LocalPlayroom} from './local-playroom.mjs';
 import {animals} from './playroom.mjs';
 
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
-const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png' };
+const types = { html: 'text/html', js: 'text/javascript', cjs: 'text/javascript', css: 'text/css', png: 'image/png' };
 Object.assign(files,{'/weather-ui.js':'weather-ui.js','/weather.css':'weather.css','/weather-controls.js':'weather-controls.js'});
-Object.assign(files,{'/research-ui.js':'research-ui.js','/research.css':'research.css'});
+Object.assign(files,{'/research-pages.js':'research-pages.cjs','/research-ui.js':'research-ui.js','/research.css':'research.css'});
 Object.assign(files,{'/playroom-ui.js':'playroom-ui.js','/playroom.css':'playroom.css','/playroom-controls.js':'playroom-controls.js'});
 Object.assign(files,{'/studio-ui.js':'studio-ui.js','/studio.css':'studio.css','/studio-controls.js':'studio-controls.js'});
 Object.assign(files,{'/workflow-ui.js':'workflow-ui.js','/workflow.css':'workflow.css','/workflow-controls.js':'workflow-controls.js'});

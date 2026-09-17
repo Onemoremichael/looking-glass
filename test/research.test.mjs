@@ -38,7 +38,8 @@ test('research saves recipe, not facts, persists, reuses fresh results without p
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 test('research renderer escapes content, paginates equally, and has no mirror controls',()=>{
-  const ctx={window:{}};runInNewContext(readFileSync(new URL('../public/research-ui.js',import.meta.url),'utf8'),ctx);
+  const ctx={window:{}};
+  for(const file of ['research-pages.cjs','research-ui.js'])runInNewContext(readFileSync(new URL('../public/'+file,import.meta.url),'utf8'),ctx);
   const b={...board(),page:0,fetchedAt:Date.now()};b.cards[0].heading='<script>bad</script>';
   const mirror=ctx.window.GlassResearch.render(b,false),remote=ctx.window.GlassResearch.render(b,true);
   assert.match(mirror,/&lt;script&gt;/);assert.doesNotMatch(mirror,/<(?:a |button|input|script)/);

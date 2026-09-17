@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import researchPages from './public/research-pages.cjs';
 import {newGame,advanceGame,gameReceipt} from './playroom.mjs';
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -112,7 +113,7 @@ export class Session {
         this.apply(a.action,a);
         if(a.action==='open_image'){const j=this.state.imageJobs.find(j=>j.id===a.jobId);confirmations.push('Artwork '+j.spec.title+': '+j.status+'. '+j.detail);continue;}
         if(a.action==='playroom_turn'){confirmations.push(this.state.playroom.prompt);continue;}
-        if(['compose_research','open_research_view','research_page'].includes(a.action)){confirmations.push(this.state.research.summary+' '+(this.state.research.caveat||'')+' Research checked '+new Date(this.state.research.fetchedAt).toISOString()+'. '+(this.state.research.savedId?'The recipe is saved for reuse.':'Recipe not saved: library full.')+' Page '+(this.state.research.page+1)+' of '+Math.ceil(this.state.research.cards.length/2)+'.');continue;}
+        if(['compose_research','open_research_view','research_page'].includes(a.action)){confirmations.push(this.state.research.summary+' '+(this.state.research.caveat||'')+' Research checked '+new Date(this.state.research.fetchedAt).toISOString()+'. '+(this.state.research.savedId?'The recipe is saved for reuse.':'Recipe not saved: library full.')+' Page '+(this.state.research.page+1)+' of '+researchPages.current(this.state.research).total+'.');continue;}
         if(a.action==='compose_weather'||a.action==='open_weather_view'){confirmations.push(compositionSummary(this.state.weather.composition.data));if(a.action==='compose_weather')confirmations.push(this.state.weather.composition.savedId?'This layout is saved automatically for reuse; do not ask to save it.':'This view was not saved: '+this.state.weather.composition.saveReason+'.');continue;}
         if(a.action==='resolve_view_offer'||a.action==='save_current_view'){confirmations.push(this.state.message);continue;}
         if(a.action==='get_weather'||(a.action==='show'&&a.panel==='weather')){confirmations.push(weatherSummary(this.state.weather,this.state.weather.view,this.now()));continue;}
@@ -183,7 +184,8 @@ export class Session {
     }
     if(action==='research_page'){
       if(s.panel!=='research'||!s.research||!['next','previous'].includes(args.direction))throw Error('No research page');
-      s.research.page=Math.max(0,Math.min(Math.ceil(s.research.cards.length/2)-1,(s.research.page||0)+(args.direction==='next'?1:-1)));return;
+      const view=researchPages.current(s.research);
+      s.research.page=Math.max(0,Math.min(view.total-1,view.index+(args.direction==='next'?1:-1)));return;
     }
     if(action==='compose_weather'){
       validateWeatherSpec(args.spec);
