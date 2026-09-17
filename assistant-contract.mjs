@@ -1,4 +1,5 @@
 import {quickActionSchema} from './quick-actions.mjs';
+import researchPages from './public/research-pages.cjs';
 import {weatherView} from './weather.mjs';
 import {weatherComponents,weatherRanges} from './weather-composition.mjs';
 import {researchBoardSchema,researchView} from './research-board.mjs';
@@ -111,7 +112,8 @@ export function presentation(state,now=Date.now()) {
       weatherViews:state.panel==='saved'?(state.weatherViews||[]):[],homeSummary:state.panel==='home'?{savedViews:state.recipes.length+(state.weatherViews||[]).length,requests:state.tasks.filter(t=>t.status!=='cancelled').length,backgroundResearch:false}:null},
     weather:state.panel==='weather'?{...weatherView(state.weather,now),view:state.weather?.view||'now',composition:state.weather.composition||null}:null,
     research:state.panel==='research'?researchView(state,now):null,
-    researchVisibleCardNumbers:state.panel==='research'&&state.research?state.research.cards.slice((state.research.page||0)*2,(state.research.page||0)*2+2).map((_,i)=>(state.research.page||0)*2+i+1):[],
+    researchPagination:state.panel==='research'&&state.research?researchPages.current(state.research):null,
+    researchVisibleCardNumbers:state.panel==='research'&&state.research?researchPages.current(state.research).page.cardNumbers:[],
     viewOffer:state.viewOffer||null,weatherViews:state.weatherViews||[],
     disconnectedPlaceholder:state.panel==='calendar'?'calendar':null,
     clarification:state.assistant?.status==='clarify'?state.assistant:null,

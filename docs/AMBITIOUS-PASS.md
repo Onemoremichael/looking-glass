@@ -10,8 +10,13 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
 
 1. **Research experiences** — foundation implemented: live search, structured
    boards, citations, reusable recipes, fresh/cache distinction, voice access.
-   Contract and provider checks passed; portrait overflow prompted two-card
-   pagination. Final hardware fit and broader semantic reuse remain follow-up.
+  Contract and provider checks passed; portrait overflow prompted two-card
+   pagination. Short-result hardware fit is now verified. Maximum-length text
+   exposed further overflow; a shared content-aware planner now gives dense
+   boards an overview plus one finding per page. Android overview/finding
+   framebuffers verified, 290 tests pass; all numbered cards, limitations and
+   source links remain reachable with model-aware voice pagination. Broader
+   semantic reuse and spoken acceptance remain follow-up.
 2. **Creative studio** — implemented adapter and job foundation: current GPT Image
    2.5 Sunburst, single-request jobs, progress/cancel/restart handling, persisted
    PNGs and prompt recipes, local reopening and voice-planner actions. Offline
@@ -108,6 +113,10 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    wake calibration, microphone/speaker replay, restart/reuse verification.
 
 After each pass: update docs with evidence and limitations, commit, push, merge.
+Owner's closure instruction: finish the functionality already in flight, then
+close the goal. Prioritize completion/acceptance over adding new feature scope.
+Offline fixtures alone do not close paid-provider, physical-audio or child-safety
+gates; budget changes still need explicit approval.
 Do not mark the overall goal complete while any requested capability is pending.
 Tests use isolated state; paid checks share the existing $25 allowance. Never
 reset the ledger, silently retry paid inference, or start recording by default.

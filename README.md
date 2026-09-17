@@ -54,7 +54,9 @@ connection still shows a stale-data warning.
 - State saved atomically to ignored `data/state.json`; restart preserves items.
 - Request capture and an example clarification flow for Gators sports.
 - Live, read-only web research assembled into cited briefing, agenda, comparison,
-  or step-by-step boards. Two large cards per page with voice paging. Recipes
+  or step-by-step boards. Two large cards per short page; dense results use an
+  overview and individual finding pages, synchronized with agent context. Voice
+  paging keeps long results reachable on the non-touch portrait mirror. Recipes
   save automatically; cached results reopen locally for 15 minutes, and refresh
   re-runs the query rather than pretending old facts are current. See [research](docs/RESEARCH.md).
 - Save configured requests as recipes; fork preferences without modifying originals.
