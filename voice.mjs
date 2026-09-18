@@ -18,6 +18,7 @@ import {savedViewIntent} from './weather-composition.mjs';
 import {researchIntent,RESEARCH_FRESH_MS} from './research-board.mjs';
 import {assistantFailureMessage} from './agent-recovery.mjs';
 import {gameIntent,gameReceipt,playroomInstructions} from './playroom.mjs';
+import {backgroundCommentary} from './live-commentary.mjs';
 
 export function isConversationEnd(text){return /^(?:(?:ok(?:ay)?|thanks|thank you)[,.!]?\s+)?(?:that['’]?s all|end (?:the )?conversation|stop listening|goodbye)(?:[,.!]?\s+(?:thanks|thank you|mirror))?[.!?\s]*$/i.test(text.trim());}
 export function wakeIdle(a,now){
@@ -106,7 +107,11 @@ export class Voice {
         break;
       }}
     }catch{void this.stop(a.token,'audio_backpressure');}}});
-    a.ws.on('error',()=>void this.stop(a.token,'transport_error'));
+    a.ws.on('error',error=>{
+      // Classify provider command rejection separately from a broken socket.
+      a.trace.event('transport.error',{error_code:error?.error?.type==='error'?'live_command_rejected':'transport_failed'});
+      void this.stop(a.token,'transport_error');
+    });
     a.ws.socket.on('close',()=>{if(!a.finalized&&!a.closing)void this.stop(a.token,'transport_error');});
     a.onAudio=data=>{if(!a.closing&&!a.finishing&&a.ws.socket.readyState===1)a.ws.send({type:'session.input_audio.append',audio:data.toString('base64')});};
     a.onDisconnect=()=>void this.stop(a.token,'mirror_disconnected');
@@ -140,6 +145,15 @@ export class Voice {
       return;
     }
     if (a.closing) return;
+    if(e.type==='session.commentary.appended'&&e.client_event_id===a.backgroundDelivery?.id){
+      a.trace.event('background.accepted');
+    }
+    if(e.type==='session.output_audio.delta'&&a.backgroundDelivery&&!a.backgroundDelivery.audioStarted){
+      const pcm=Buffer.from(e.delta,'base64');
+      for(let i=0;i+1<pcm.length;i+=2)if(Math.abs(pcm.readInt16LE(i))>180){
+        a.backgroundDelivery.audioStarted=true;a.trace.event('background.audio_started');break;
+      }
+    }
     // Reflected transcript fragments can still arrive after input mute. They
     // must not create another game turn or reopen work during the farewell.
     if(a.finishing&&['session.input_transcript.delta','session.delegation.created'].includes(e.type))return;
@@ -345,8 +359,8 @@ export class Voice {
       this.reply(a,job.id,message);this.update('needs_input',message);
     }finally{progress.stop();this.jobs.delete(job);this.backgroundState();}
   }
-  reply(a,id,content) {
-    if (!a.closing && a.ws?.socket.readyState === 1) {a.ws.send({type:'session.commentary.append',delegation_id:id,content});a.responsePendingAt=Date.now();return true;}
+  reply(a,id,content,eventId) {
+    if (!a.closing && a.ws?.socket.readyState === 1) {a.ws.send({type:'session.commentary.append',delegation_id:id,content,...(eventId?{event_id:eventId}:{})});a.responsePendingAt=Date.now();return true;}
     return false;
   }
   backgroundState(){
@@ -389,9 +403,9 @@ export class Voice {
         a=this.active;
       }
       if(!a||a.closing||this.state.muted||item.epoch!==this.announcementEpoch||Date.now()>=item.expiresAt)return;
-      const content=JSON.stringify({kind:'background_result',request:item.job.text,result:item.result,
-        guidance:'This is a completed earlier request, not a new command. Briefly announce the verified result or failure, then listen. Do not delegate or rerun it. Do not claim an older result is currently visible if the display has since changed.'});
-      if(this.reply(a,null,content))a.trace.event('background.announced',{outcome:item.result.status});
+      const content=backgroundCommentary(item.result);
+      a.backgroundDelivery={id:randomUUID(),audioStarted:false};
+      if(this.reply(a,null,content,a.backgroundDelivery.id))a.trace.event('background.submitted',{outcome:item.result.status});
     }catch{
       // Fail closed: budget, transport and missing final usage remain enforced.
       this.telemetry.start('voice.background').end({outcome:'error',error_code:'startup_failed'});

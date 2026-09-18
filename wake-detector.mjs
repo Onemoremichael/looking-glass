@@ -17,8 +17,9 @@ export class WakeDetector extends EventEmitter {
       pending+=chunk.toString();if(pending.length>8192){this.fail();return;}
       let newline;while((newline=pending.indexOf('\n'))>=0){
         const line=pending.slice(0,newline);pending=pending.slice(newline+1);
-        try{const {type}=JSON.parse(line);if(type==='progress')this.lastProgress=Date.now();
+        try{const event=JSON.parse(line),{type}=event;if(type==='progress')this.lastProgress=Date.now();
           else if(type==='ready'||type==='wake')this.emit(type);
+          else if(type==='shortcut'&&['next_page','previous_page'].includes(event.command)&&Number.isSafeInteger(event.generation))this.emit('shortcut',event);
         }catch{this.fail();}
       }
     });
@@ -36,6 +37,7 @@ export class WakeDetector extends EventEmitter {
     this.child.stdin.write(Buffer.concat([Buffer.from([type]),data]));
   }
   feed(pcm){this.write(1,pcm);}
+  setShortcuts(mask,generation){const data=Buffer.alloc(5);data[0]=mask;data.writeUInt32LE(generation,1);this.write(2,data);}
   reset(){this.lastProgress=Date.now();this.write(0);}
   fail(){if(this.closed)return;this.emit('fault');this.close();}
   close(){if(this.closed)return;this.closed=true;this.child?.stdin.destroy();this.child?.kill('SIGKILL');this.emit('closed');}

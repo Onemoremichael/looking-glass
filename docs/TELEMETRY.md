@@ -100,6 +100,14 @@ Cloud end-to-end ingestion remains unverified until a project is configured.
 Research diagnostics include `planner_stage` (provider/contract/source_fetch/
 provenance), bounded failure codes and `research.source_checked` with check type
 and count. Raw exceptions, source URLs and generated source content are excluded.
+Background speech uses distinct `background.submitted`, `background.accepted`,
+and `background.audio_started` events. Submission is not speech; non-silent generated
+audio is not proof of physical audibility. The older `background.announced` event
+is retained for historical trace reads only. Native provider command errors use
+`live_command_rejected` without exporting their raw payload or error text.
+Successful temporary local page commands emit `wake.shortcut` with the allowlisted
+`research_page` action and committed revision. No PCM or standby transcripts are
+retained. A keyword detection without a valid visible-page capability cannot commit.
 
 Official references checked September 15, 2026:
 - [Langfuse OTLP ingestion](https://langfuse.com/integrations/native/opentelemetry)

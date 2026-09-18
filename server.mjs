@@ -20,6 +20,8 @@ import {animals} from './playroom.mjs';
 
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
 const types = { html: 'text/html', js: 'text/javascript', cjs: 'text/javascript', css: 'text/css', png: 'image/png' };
+Object.assign(files,{'/clocks':'clocks.html','/clock-art.js':'clock-art.cjs','/clock-controls.js':'clock-controls.js','/clocks.css':'clocks.css'});
+files['/assets/clocks/tourbillon-bezel-v1.png']='assets/clocks/tourbillon-bezel-v1.png';
 Object.assign(files,{'/weather-ui.js':'weather-ui.js','/weather.css':'weather.css','/weather-controls.js':'weather-controls.js'});
 Object.assign(files,{'/research-pages.js':'research-pages.cjs','/research-ui.js':'research-ui.js','/research.css':'research.css'});
 Object.assign(files,{'/playroom-ui.js':'playroom-ui.js','/playroom.css':'playroom.css','/playroom-controls.js':'playroom-controls.js'});
@@ -46,7 +48,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
   const functions=new CustomFunctions({session,telemetry});if(assistant)assistant.functions=functions;
   const voice = new Voice({ session, telemetry, assistant, budgetPath, ...voiceOptions,
     publish: state => { for (const client of clients) client.write(`event: voice\ndata: ${JSON.stringify(state)}\n\n`); } });
-  const wake=new Wake({voice,mirror:mirrorAudio,...wakeOptions,publish:state=>{
+  const wake=new Wake({voice,mirror:mirrorAudio,surfaces,...wakeOptions,publish:state=>{
     telemetry?.start('wake.state',{wake_phase:state.phase,wake_reason:state.reason}).end({outcome:'ok'});
     for(const client of clients)client.write(`event: wake\ndata: ${JSON.stringify(state)}\n\n`);
   }});

@@ -17,11 +17,11 @@ const enums = {
   repair_state:['started','verified'],
   check:['runtime_rejected','output_contract','example_mismatch'],
   outcome:['ok','error','cancelled','superseded','needs_input','completed','unconfirmed'],
-  action:['start_timer','cancel_timer','add_todo','show','get_weather','compose_weather','open_weather_view','resolve_view_offer','unsupported','assistant'],
+  action:['start_timer','cancel_timer','add_todo','show','get_weather','compose_weather','open_weather_view','resolve_view_offer','research_page','unsupported','assistant'],
   source:['builtin','learned'],
   template:['start_timer','cancel_only_timer','show_panel','get_weather','weather_view'],
   reason:['user','shutdown','lease_expired','duration_limit','idle_timeout','spoken_end','spoken_disable','wake_disabled','transport_error','startup_error','close_requested','expired','content','remote_hangup','connection_lost','unknown','game_complete','game_stopped','game_wrap_timeout'],
-  error_code:['startup_failed','transport_failed','tool_failed','budget_failed','final_usage_missing','hangup_failed','timer_context_failed','timer_confirmation_failed','agent_recovery_required','test_budget_exhausted','agent_provider_failed','agent_interrupted','planner_contract_invalid','planner_output_invalid','research_limit','research_source_unavailable','research_provenance_failed'],
+  error_code:['live_command_rejected','startup_failed','transport_failed','tool_failed','budget_failed','final_usage_missing','hangup_failed','timer_context_failed','timer_confirmation_failed','agent_recovery_required','test_budget_exhausted','agent_provider_failed','agent_interrupted','planner_contract_invalid','planner_output_invalid','research_limit','research_source_unavailable','research_provenance_failed'],
   fallback_reason:['invalid_request','uncertain_language','unrecognized_duration','unsupported_wording','missing_duration','disabled','pending_clarification','state_changed','commit_failed','not_committed','ambiguous_target','stale_surface','not_learned'],
 };
 const numeric = new Set(['source_count','step_count','duration_ms','seconds','estimated_usd','transcript_chars','fragment_count','quiet_window_ms','since_last_fragment_ms','since_tool_ms','revision','timer_count']);
@@ -52,8 +52,8 @@ export function exportConfig(env={}) {
   if(url.username||url.password||url.search||url.hash||!(url.protocol==='https:'||(url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname))))throw Error('Telemetry endpoint must use HTTPS or loopback HTTP, without URL credentials');
   return {url:url.toString(),headers,timeoutMillis:2000};
 }
-const names=new Set(['function.reuse','function.execute','workflow.run','workflow.step_reuse','image.generate','wake.state','voice.session','voice.background','voice.startup','voice.delegation','voice.tool','voice.timer_fast','voice.close','agent.decision','agent.planning','agent.cleanup','agent.recovery']);
-const eventNames=new Set(['phase','duplicate','watchdog','transport.error','usage','superseded','heartbeat.ready','playback.detected','waiting.acknowledgment','timer.delegation_reconciled','timer.fast_fallback','quick_action.promoted','game.wrapup','function.repair','background.detached','background.announced','research.source_checked']);
+const names=new Set(['function.reuse','function.execute','workflow.run','workflow.step_reuse','image.generate','wake.state','wake.shortcut','voice.session','voice.background','voice.startup','voice.delegation','voice.tool','voice.timer_fast','voice.close','agent.decision','agent.planning','agent.cleanup','agent.recovery']);
+const eventNames=new Set(['phase','duplicate','watchdog','transport.error','usage','superseded','heartbeat.ready','playback.detected','waiting.acknowledgment','timer.delegation_reconciled','timer.fast_fallback','quick_action.promoted','game.wrapup','function.repair','background.detached','background.announced','background.submitted','background.accepted','background.audio_started','research.source_checked']);
 export class Telemetry {
   constructor({file,env={},exporter,now=Date.now,maxBytes=2*1024*1024}={}) {
     this.file=file;this.now=now;this.maxBytes=maxBytes;this.records=[];this.failures=0;this.exportFailures=0;

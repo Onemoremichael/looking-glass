@@ -46,6 +46,16 @@ Cache age is not a guarantee that a schedule or recommendation remains unchanged
 The UI shows when research was checked and retains limitations supplied by the
 agent. The renderer does not invent data, dates, images or arbitrary HTML.
 Broader semantic recognition beyond saved titles remains follow-up work.
+Page navigation itself is local: “next page,” “show me the next page,” and “go back”
+do not invoke the planner when a research board is active. Negated/compound commands
+and pending clarifications do not use that shortcut. Mirror page hints now reflect
+whether voice is listening, wake standby is armed, or voice must be started on the
+companion; displayed text no longer implies a closed microphone is listening.
+Armed local standby now grants a view-scoped temporary **next page / previous page**
+keyword profile for a current, visible mirror page. These two phrases navigate
+without Hey Mirror or a cloud session; only available directions are enabled.
+The footer advertises direct speech only while that capability is valid. Other
+phrasing still needs an active conversation. See [scope and limits](WAKE.md).
 
 ## Verification
 

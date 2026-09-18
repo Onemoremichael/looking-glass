@@ -9,6 +9,16 @@ import {createApp} from '../server.mjs';
 
 function board(dense=false){return {spec:{title:'Portrait test',layout:'briefing',query:'Fixture'},summary:dense?'Summary '.repeat(37):'Short summary',caveat:dense?'Caveat '.repeat(42):'Check sources',cards:Array.from({length:6},(_,i)=>({heading:'Finding '+(i+1),kicker:'Fixture',body:dense?'Long body '.repeat(35):'Short body',detail:'Context '+i,sourceIds:['fixture']})),sources:[{id:'fixture',title:'Fixture',url:'https://example.com/'}],fetchedAt:Date.now(),page:0};}
 function browser(){const ctx={window:{}};for(const file of ['research-pages.cjs','research-ui.js'])runInNewContext(readFileSync(new URL('../public/'+file,import.meta.url),'utf8'),ctx);return ctx.window;}
+test('research navigation hints reflect active, standby, muted and disconnected voice',()=>{
+  const hint=browser().GlassResearch.navigationHint;
+  assert.equal(hint('next',{phase:'listening'}),'Say “next page”');
+  assert.equal(hint('previous',{phase:'off'},{enabled:true,phase:'standby'}),'Say “Hey Mirror”, then “previous page”');
+  const wake={enabled:true,phase:'standby',shortcuts:['next_page'],shortcutsExpireAt:Date.now()+120000};
+  assert.equal(hint('next',{phase:'off'},wake),'Say “next page”');
+  assert.equal(hint('previous',{phase:'off'},wake),'Say “Hey Mirror”, then “previous page”');
+  assert.equal(hint('next',{phase:'off'},{...wake,shortcutsExpireAt:0}),'Say “Hey Mirror”, then “next page”');
+  for(const voice of [null,{phase:'off'},{phase:'error'},{phase:'muted',muted:true}])assert.match(hint('next',voice),/^Start voice on companion/);
+});
 test('shared ES5 page plans preserve every finding and agree across surfaces',()=>{
   const w=browser();
   for(const dense of [false,true])for(const layout of ['briefing','agenda','comparison','steps']){
@@ -38,7 +48,7 @@ test('session navigation and model-visible context use actual pages, including o
   assert.equal(presentation(s.state).researchPagination.page.kind,'context');
   for(let n=1;n<=6;n++){s.command('research_page',{direction:'next'});assert.deepEqual(presentation(s.state).researchVisibleCardNumbers,[n]);}
   s.command('research_page',{direction:'next'});assert.equal(s.state.research.page,6);
-  assert.match(browser().GlassResearch.render(s.state.research,false),/Say “previous page”/);
+  assert.match(browser().GlassResearch.render(s.state.research,false),/Start voice on companion · previous page/);
   s.command('research_page',{direction:'previous'});assert.deepEqual(presentation(s.state).researchVisibleCardNumbers,[5]);
   s.state.research.page=99;assert.equal(pages.current(s.state.research).index,6);
   s.state.research.page=-4;assert.equal(pages.current(s.state.research).index,0);
