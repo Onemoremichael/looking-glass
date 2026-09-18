@@ -3,6 +3,7 @@
   var colors={jade:'#b8ddce',amber:'#eac693',ice:'#badcf0',rose:'#dfbfcf'};
   var materialSerial=0;
   styles.splice(3,0,{id:'tourbillon',name:'Tourbillon',kind:'Analog',description:'An open-work instrument. A flying cage, a breathing balance, time in motion.'});
+  styles.splice(4,0,{id:'folio',name:'Folio',kind:'Analog',description:'An engraver’s dial. Ivory paper, faded washes and fine ink.'});
   function defaults(){return {style:'orbit',accent:'jade',x:50,y:35,scale:70,seconds:true,day:true,date:true,hour24:false};}
   function valid(c){return !!c&&Object.keys(c).sort().join(',')==='accent,date,day,hour24,scale,seconds,style,x,y'&&styles.some(function(s){return s.id===c.style;})&&Object.prototype.hasOwnProperty.call(colors,c.accent)&&['x','y','scale'].every(function(k){return typeof c[k]==='number'&&isFinite(c[k])&&Math.floor(c[k])===c[k]&&c[k]>= (k==='scale'?25:0)&&c[k]<=100;})&&['seconds','day','date','hour24'].every(function(k){return typeof c[k]==='boolean';});}
   function normalize(c){
@@ -115,6 +116,23 @@
       out+=hand(hour*30,132,24,a,25)+hand(minute*6,209,9,ink,25);
       if(c.seconds)out+=hand(t.s*6,204,2,a,55)+dot(t.s*6,204,6,a);
       out+=dot(0,0,12,ink);
+    }else if(c.style==='folio'){
+      var etch='#343c35',faint='#8b8b70',paper='#e9e5cd';
+      var wash={jade:'#668d84',amber:'#608c9d',ice:'#668ca6',rose:'#947789'}[c.accent];
+      function caption(x,y,s,size){return text(x,y,s,size||12,etch,'Georgia, serif');}
+      out='<defs><linearGradient id="'+materialId+'-paper" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f0ecda"/><stop offset=".6" stop-color="'+paper+'"/><stop offset="1" stop-color="#d9d5bc"/></linearGradient><clipPath id="'+materialId+'-paper-clip"><circle cx="300" cy="300" r="276"/></clipPath></defs>';
+      out+='<g data-folio-face="circle"><circle cx="300" cy="300" r="276" fill="url(#'+materialId+'-paper)"/><image x="24" y="24" width="552" height="552" clip-path="url(#'+materialId+'-paper-clip)" opacity=".82" href="/assets/clocks/folio-paper-v1.png" xlink:href="/assets/clocks/folio-paper-v1.png"/>';
+      // The main plan is deliberately ink-on-paper, with open tinted construction.
+      out+='<g transform="translate(300 300) scale(1.6)"><circle r="169" fill="none" stroke="'+etch+'" stroke-width="1"/><circle r="164" fill="none" stroke="'+faint+'" stroke-width=".6"/><circle r="134" fill="none" stroke="'+faint+'" stroke-width=".5"/><path d="M -163 0 H 163 M 0 -163 V 163" stroke="'+faint+'" stroke-dasharray="2 4" stroke-width=".5"/>';
+      for(var fm=0;fm<60;fm++)out+='<path d="M 0 -163 v '+(fm%5?4:9)+'" transform="rotate('+(fm*6)+')" stroke="'+etch+'" stroke-width="'+(fm%5?.6:1.1)+'"/>';
+      var folioRomans=['XII','I','II','III','IV','V','VI','VII','VIII','IX','X','XI'];
+      for(var fn=0;fn<12;fn++){var fr=(fn*30-90)*Math.PI/180;out+=caption(Math.cos(fr)*146,Math.sin(fr)*146+6,folioRomans[fn],18);}
+      out+='<path d="M -41 -103 L 40 -103 L 81 102 L -79 102 Z" fill="#b5b27b" fill-opacity=".24" stroke="'+faint+'" stroke-width=".7"/><circle cy="-69" r="22" fill="'+wash+'" fill-opacity=".44" stroke="'+etch+'" stroke-width=".8"/><path d="M -20 -78 L 20 -60" stroke="'+etch+'" stroke-width="1"/><circle cy="47" r="64" fill="#cac78c" fill-opacity=".26" stroke="'+faint+'" stroke-width=".6"/><circle cy="47" r="48" fill="none" stroke="'+faint+'" stroke-width=".4"/>';
+      out+=caption(-94,-48,'A',10)+caption(88,96,'B',10);
+      out+='<g data-folio-hand="hour" transform="rotate('+(hour*30)+')"><path d="M -5 18 L -5 -77 L 0 -98 L 5 -77 L 5 18 Z" fill="#a3a057" fill-opacity=".83" stroke="'+etch+'" stroke-width=".9"/></g><g data-folio-hand="minute" transform="rotate('+(minute*6)+')"><path d="M -3 28 L -3 -115 L 0 -137 L 3 -115 L 3 28 Z" fill="'+wash+'" stroke="'+etch+'" stroke-width=".9"/></g>';
+      if(c.seconds)out+='<g data-folio-hand="second" transform="rotate('+(t.s*6)+')"><path d="M 0 32 V -150" stroke="#995b46" stroke-width=".85"/><circle cy="25" r="4" fill="none" stroke="#995b46" stroke-width=".9"/></g>';
+      out+='<circle r="7" fill="'+paper+'" stroke="'+etch+'"/><circle r="2.5" fill="'+etch+'"/></g>';
+      out+='</g>';
     }else if(c.style==='tourbillon'){
       // Open-work architecture: dark voids remain reflective, highlights catch light.
       out='<defs><linearGradient id="'+materialId+'-gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff4d4"/><stop offset=".23" stop-color="'+a+'"/><stop offset=".45" stop-color="#796241"/><stop offset=".55" stop-color="#f1dfb8"/><stop offset=".8" stop-color="#a08451"/><stop offset="1" stop-color="#302417"/></linearGradient><linearGradient id="'+materialId+'-steel" x1="0" y1="0" x2=".3" y2="1"><stop stop-color="#f1f4ec"/><stop offset=".2" stop-color="#9aa99d"/><stop offset=".48" stop-color="#344039"/><stop offset=".52" stop-color="#cad3c7"/><stop offset="1" stop-color="#43544a"/></linearGradient><radialGradient id="'+materialId+'-plate" cx=".3" cy=".2" r=".9"><stop stop-color="#25322c"/><stop offset=".55" stop-color="#0e1712"/><stop offset="1" stop-color="#000"/></radialGradient><radialGradient id="'+materialId+'-ruby" cx=".3" cy=".2"><stop stop-color="#ffe1eb"/><stop offset=".2" stop-color="#d77094"/><stop offset=".6" stop-color="#791f48"/><stop offset="1" stop-color="#1e0715"/></radialGradient></defs>';
@@ -188,6 +206,10 @@
       }
       dayArt+=text(300,592,shortDay,15,ink);
       dateArt=text(300,c.day?614:592,dateLabel,20,a,'Georgia, serif');
+    }else if(c.style==='folio'){
+      dayArt=text(c.date?251:300,482,shortDay,16,'#343c35','Georgia, serif');
+      dateArt=text(c.day?349:300,482,dateLabel,16,'#343c35','Georgia, serif');
+      if(c.day&&c.date)out+='<path d="M 300 470 V 484" stroke="#8b8b70" stroke-width=".6"/>';
     }else if(c.style==='tourbillon'){
       dayArt=text(c.date?228:300,596,shortDay,18,ink,'Georgia, serif');
       dateArt=text(c.day?361:300,596,dateLabel,18,a,'Georgia, serif');
@@ -228,23 +250,27 @@
     var reduced=win&&win.matchMedia&&win.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var hidden=win&&win.document&&win.document.hidden;
     if(last&&last.frame&&(last.key!==key||reduced||hidden)){win.cancelAnimationFrame(last.frame);last.frame=null;}
-    if(c.style==='tourbillon'&&win&&win.requestAnimationFrame){
+    if((c.style==='tourbillon'||c.style==='folio')&&win&&win.requestAnimationFrame){
       // Rebuild only when the minute/calendar/configuration changes, not each frame.
       var dialKey=key+'|'+Math.floor(d.getTime()/60000);
       if(!last||last.dialKey!==dialKey){
         if(last&&last.frame)win.cancelAnimationFrame(last.frame);
-        el.innerHTML=scene(c,d,zone);last={key:key,date:d,frame:null,dialKey:dialKey,nodes:el.querySelectorAll('[data-motion]')};el._glassClock=last;
+        el.innerHTML=scene(c,d,zone);last={key:key,date:d,frame:null,dialKey:dialKey,nodes:el.querySelectorAll(c.style==='folio'?'[data-folio], [data-folio-hand]':'[data-motion]')};el._glassClock=last;
       }
       if(last.frame||reduced||hidden||!c.seconds)return;
-      var origin=d.getTime(),started=null,painted=-100;
+      var origin=d.getTime(),started=null,painted=-100,local=time(d,zone);
       function movement(stamp){
         last.frame=null;if(el._glassClock!==last||el.hidden||(win.document&&win.document.hidden))return;
         if(started===null)started=stamp;
         if(stamp-painted>=33){
           // Bound the period to the barrel's eight-hour revolution for precision.
-          var seconds=((origin+stamp-started)/1000)%28800,state=movementState(seconds);
-          for(var ni=0;ni<last.nodes.length;ni++){var node=last.nodes[ni],kind=node.getAttribute('data-motion');
-            if(kind==='spring')node.setAttribute('d',hairspring(state.balance));
+          var seconds=((origin+stamp-started)/1000)%28800,state=c.style==='folio'?{}:movementState(seconds);
+          for(var ni=0;ni<last.nodes.length;ni++){var node=last.nodes[ni],kind=node.getAttribute(c.style==='folio'?'data-folio':'data-motion');
+            if(c.style==='folio'&&node.getAttribute('data-folio-hand')){
+              var elapsed=local.s+(d.getMilliseconds()+stamp-started)/1000,which=node.getAttribute('data-folio-hand');
+              var angle=which==='hour'?(local.h%12+local.m/60+elapsed/3600)*30:which==='minute'?(local.m+elapsed/60)*6:elapsed*6;
+              node.setAttribute('transform','rotate('+(angle%360)+')');
+            }else if(kind==='spring')node.setAttribute('d',hairspring(state.balance));
             else if(Object.prototype.hasOwnProperty.call(state,kind))node.setAttribute('transform','rotate('+(state[kind]%360)+')');
           }
           painted=stamp;

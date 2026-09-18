@@ -1,9 +1,10 @@
 # Clock studio
 
 Open `/clocks` from the companion's **Clock studio** link. The mirror remains
-output-only. Seven SVG clock faces require no network fonts, graphics packages,
+output-only. Eight SVG clock faces require no network fonts, graphics packages,
 or newer Android browser APIs. Tourbillon includes one local generated alpha PNG
-bezel; all hands, numerals and moving mechanism parts remain vector-rendered.
+bezel; Folio includes a local generated ivory paper texture. All hands, numerals
+and moving mechanism parts remain vector-rendered.
 
 - **Orbit**: subtly heavier hour ring, finer minute ring, 60 second dots and
   orbiting markers. Turning seconds off hides the dots and current-second marker.
@@ -14,6 +15,15 @@ bezel; all hands, numerals and moving mechanism parts remain vector-rendered.
   oscillating balance and stepped escapement. A coherent illustrative kinematic
   model, not an engineering-ready caliber or physical contact-force simulation.
 - **Monolith**: oversized stacked hour/minute typography.
+- **Folio**: a circular antique-inspired Roman dial with faded blue/ochre washes.
+  Only the clock face has an opaque ivory field; there is no rectangular sheet
+  or surrounding diagram. A circle-clipped rag-paper texture supplies organic fibers
+  beneath vector linework at 82% opacity, with a plain ivory fallback; no SVG filters.
+  Accent controls change the blue wash to muted jade/ice/rose alternatives.
+  Optional day/date sit inside the dial as a small serif colophon.
+  The reference inspires the visual language, not a reproduced historical diagram.
+  Hands track the selected time zone with time-based transforms.
+  Hidden/reduced-motion views pause; Seconds off hides the second hand and stops smooth animation.
 - **Ribbon**: minimal digital time and a minute-progress horizon.
 - **Split**: paired outlined departure-board tiles.
 
@@ -59,7 +69,7 @@ There are no clock-edit voice tools yet; customization is through the companion.
 
 ## Calendar treatments
 
-Both day and date can be shown, either alone, or neither, on all seven faces.
+Both day and date can be shown, either alone, or neither, on all eight faces.
 Orbit uses seven Monday-first weekday satellites (today illuminated) and a serif
 month/day caption. Atelier has a watch-style day/date window. Meridian pairs an
 accent weekday badge with a bold date. Monolith has a two-tier typographic colophon.
@@ -112,7 +122,8 @@ the mechanism still. The photoreal bezel is a static local asset; movement does 
 call a model. Metal gradients, recessed plates, offset shadows and ruby bearings
 provide depth without expensive blur filters. Gradient IDs are unique per SVG.
 
-Fifteen clock-specific tests cover all seven renderers, split-flap transitions/player lifecycle,
+Sixteen clock-specific tests cover all eight renderers, split-flap transitions/player lifecycle,
+Folio's circular paper clipping, local engraving, hand updates and pause behavior,
 tourbillon motion/pause/reuse behavior, compound gear pitch and ratios,
 escapement dwell/beat frequency, anchored spring endpoints and fixed-post clearance,
 independent day/date combinations,

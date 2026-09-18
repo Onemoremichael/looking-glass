@@ -7,13 +7,39 @@ import {runInNewContext} from 'node:vm';
 import clocks from '../public/clock-art.cjs';
 import {Session} from '../session.mjs';
 import {createApp} from '../server.mjs';
-test('seven clock faces render on the shared legacy browser path without remote assets',()=>{
+test('eight clock faces render on the shared legacy browser path without remote assets',()=>{
   const context={window:{}};runInNewContext(readFileSync(new URL('../public/clock-art.cjs',import.meta.url),'utf8'),context);
-  assert.equal(clocks.styles.length,7);assert.equal(clocks.styles.filter(s=>s.kind==='Analog').length,4);
+  assert.equal(clocks.styles.length,8);assert.equal(clocks.styles.filter(s=>s.kind==='Analog').length,5);
   for(const style of clocks.styles){const c={...clocks.defaults(),style:style.id};const svg=context.window.GlassClock.scene(c,new Date('2026-01-01T15:08:36Z'),'America/New_York');
     assert.match(svg,/<svg /);assert.match(svg,/aria-label="10:08 AM"/);assert.doesNotMatch(svg,/NaN|undefined|<script|https:\/\//);
-    if(style.id==='tourbillon')assert.match(svg,/<image[^>]*\/assets\/clocks\/tourbillon-bezel-v1.png/);else assert.doesNotMatch(svg,/<image/);
+    if(style.id==='tourbillon')assert.match(svg,/<image[^>]*\/assets\/clocks\/tourbillon-bezel-v1.png/);
+    else if(style.id==='folio')assert.match(svg,/<image[^>]*\/assets\/clocks\/folio-paper-v1.png/);
+    else assert.doesNotMatch(svg,/<image/);
   }
+});
+test('Folio clips local paper to a circular dial and animates hands without rebuilding it',()=>{
+  const config={...clocks.defaults(),style:'folio'},date=new Date('2026-09-18T10:08:15.250Z');
+  assert.ok(clocks.valid(config));
+  const svg=clocks.scene(config,date,'UTC');
+  assert.match(svg,/data-folio-face="circle"/);
+  assert.match(svg,/<clipPath[^>]*><circle cx="300" cy="300" r="276"\/><\/clipPath>/);
+  assert.match(svg,/<image[^>]*clip-path="url\(#[^"]+-paper-clip\)"/);
+  assert.doesNotMatch(svg,/data-folio-sheet|data-folio="pendulum"|Horloge à pendule|<rect/);
+  assert.match(svg,/data-folio-hand="second"/);
+  assert.match(svg,/<image[^>]*\/assets\/clocks\/folio-paper-v1.png/);assert.doesNotMatch(svg,/<filter|https:\/\//);
+  assert.doesNotMatch(clocks.scene({...config,seconds:false},date,'UTC'),/data-folio-hand="second"/);
+  let writes=0,id=0,reduced=false;const queue=new Map();
+  const node=(kind,hand)=>({value:'',getAttribute:k=>k==='data-folio'?kind:k==='data-folio-hand'?hand:null,setAttribute(k,v){assert.equal(k,'transform');assert.doesNotMatch(v,/NaN/);this.value=v;}});
+  const nodes=[node(null,'second'),node(null,'minute'),node(null,'hour')];
+  const el={hidden:false,querySelectorAll:()=>nodes,set innerHTML(v){writes++;}};
+  const window={document:{hidden:false},matchMedia:()=>({matches:reduced}),requestAnimationFrame:fn=>{queue.set(++id,fn);return id;},cancelAnimationFrame:n=>queue.delete(n)};
+  runInNewContext(readFileSync(new URL('../public/clock-art.cjs',import.meta.url),'utf8'),{window});
+  const tick=stamp=>{const pending=[...queue.values()];queue.clear();pending.forEach(fn=>fn(stamp));};
+  window.GlassClock.mount(el,config,date,'UTC');tick(0);assert.equal(nodes[0].value,'rotate(91.5)');
+  tick(500);assert.equal(nodes[0].value,'rotate(94.5)');assert.equal(writes,1);
+  window.GlassClock.mount(el,config,new Date(+date+500),'UTC');assert.equal(writes,1);assert.equal(queue.size,1);
+  reduced=true;window.GlassClock.mount(el,config,date,'UTC');assert.equal(queue.size,0);
+  reduced=false;window.GlassClock.mount(el,{...config,seconds:false},date,'UTC');assert.equal(queue.size,0);
 });
 test('tourbillon updates mechanism transforms and spring path, pauses when hidden, and honors motion preferences',()=>{
   let serial=0,reduced=false,writes=0,markup='';const queue=new Map();
@@ -135,6 +161,8 @@ test('clock studio is served with proper assets and settings mutations require l
   const js=await fetch(base+'/clock-art.js');assert.match(js.headers.get('content-type'),/javascript/);
   const art=await fetch(base+'/assets/clocks/tourbillon-bezel-v1.png');assert.equal(art.status,200);assert.match(art.headers.get('content-type'),/image\/png/);
   const png=Buffer.from(await art.arrayBuffer());assert.equal(png[25],6,'bezel retains PNG alpha');
+  const paper=await fetch(base+'/assets/clocks/folio-paper-v1.png');assert.equal(paper.status,200);assert.match(paper.headers.get('content-type'),/image\/png/);
+  const texture=Buffer.from(await paper.arrayBuffer());assert.equal(texture.subarray(1,4).toString(),'PNG');
   const body=JSON.stringify({action:'set_clock',config:clocks.defaults()});
   assert.equal((await fetch(base+'/api/command',{method:'POST',headers:{Origin:'https://other.test','Content-Type':'application/json'},body})).status,403);
   assert.equal((await fetch(base+'/api/command',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body})).status,200);

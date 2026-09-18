@@ -22,6 +22,7 @@ const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surf
 const types = { html: 'text/html', js: 'text/javascript', cjs: 'text/javascript', css: 'text/css', png: 'image/png' };
 Object.assign(files,{'/clocks':'clocks.html','/clock-art.js':'clock-art.cjs','/clock-controls.js':'clock-controls.js','/clocks.css':'clocks.css'});
 files['/assets/clocks/tourbillon-bezel-v1.png']='assets/clocks/tourbillon-bezel-v1.png';
+files['/assets/clocks/folio-paper-v1.png']='assets/clocks/folio-paper-v1.png';
 Object.assign(files,{'/weather-ui.js':'weather-ui.js','/weather.css':'weather.css','/weather-controls.js':'weather-controls.js'});
 Object.assign(files,{'/research-pages.js':'research-pages.cjs','/research-ui.js':'research-ui.js','/research.css':'research.css'});
 Object.assign(files,{'/playroom-ui.js':'playroom-ui.js','/playroom.css':'playroom.css','/playroom-controls.js':'playroom-controls.js'});

@@ -3,7 +3,7 @@
 A practical assistant for a recovered, non-touch Android Mirror. Familiar tools
 should be fast; new requests can become reusable, adaptable capabilities.
 
-**Clock studio:** open `/clocks` (linked from the companion) for seven analog/digital
+**Clock studio:** open `/clocks` (linked from the companion) for eight analog/digital
 faces, draggable positioning, scale, four accents, independent weekday/date toggles,
 seconds and 12/24-hour
 controls. Designs save automatically and render on the existing Android wrapper.
