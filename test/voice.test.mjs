@@ -176,6 +176,16 @@ test('cleanup failure voice response reports planner blocker rather than asking 
   assert.match(c.ws.sent.at(-1).content,/planning is paused/);
   assert.doesNotMatch(c.ws.sent.at(-1).content,/display may have changed/);
 });
+test('spoken next page changes visible research locally without a new planner call',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
+  let calls=0;const c=await controlled(t,{fastTimers:true,assistant:{execute:()=>{calls++;throw Error('unexpected planning');}}});
+  t.after(()=>c.voice.stop());
+  c.voice.session.state.panel='research';
+  c.voice.session.state.research={id:'fixture',page:0,fetchedAt:Date.now(),spec:{title:'Fixture',query:'Fixture',layout:'comparison'},summary:'Fixture summary',caveat:'',cards:Array.from({length:4},(_,i)=>({heading:'Finding '+i,kicker:'',body:'Short body',detail:'',sourceIds:['s']})),sources:[{id:'s',title:'Fixture',url:'https://example.com/'}]};
+  input(c.ws,'Could you show me the next page please?',0);t.mock.timers.tick(700);
+  assert.equal(c.voice.session.state.research.page,1);assert.equal(calls,0);
+  assert.equal(c.ws.sent.filter(e=>e.type==='session.commentary.append').length,1);
+});
 test('timer fast lane: reported request commits at 700ms without delegation or paid planning',async t=>{
   t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:1000});
   let calls=0;const c=await controlled(t,{fastTimers:true,assistant:{execute:()=>{calls++;throw Error('unexpected planning');}}});

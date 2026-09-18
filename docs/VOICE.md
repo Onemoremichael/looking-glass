@@ -251,8 +251,44 @@ its rotation. The companion retains background status across wake-state updates.
 Offline visual fixtures: `node scripts/preview-display-qa.mjs background-work`
 or `background-ready` (port 8784; no provider, microphone or production mutations).
 The running-work fixture was inspected in the native browser and on the Android
-1080×1920 framebuffer. Its top inset was corrected to avoid overlapping the clock.
-The production URL and native audio bridge were restored afterward.
+1080×1920 framebuffer. Following the owner's overlap report, background status
+now occupies the lower left; the native active-voice glyph stays in the upper
+right. The production URL and native audio bridge are restored after fixtures.
+
+### September 17 spoken-result follow-up
+
+The owner confirmed the research board rendered, but no result speech or page
+response. The trace shows the reconnect followed by an immediate transport error;
+wake then disarmed, explaining the absent listener for “next page.” The full
+research artifact was serialized into commentary, violating Live's documented
+500-token limit. The old trace did not retain the provider error body, so it cannot
+prove that was the particular rejection; the invalid payload is independently fixed.
+
+Background delivery now sends only status, a bounded summary and short guidance,
+within a conservative **480 UTF-8 bytes** (including the JSON envelope). It never
+includes artifacts, source lists or code. Truncation is explicit. No second research
+call, automatic reconnect retry, replacement voice or budget increase is involved.
+Telemetry distinguishes `background.submitted`, correlated `background.accepted`
+and non-silent `background.audio_started`; none alone proves human audibility.
+Provider command rejection is distinct from generic socket failure in safe metadata.
+
+`node scripts/check-background-speech.mjs --run-paid` uses the shared allowance,
+synthetic silence and a discarded output stream—no mic, speaker or recording.
+The final check returned accepted commentary, six non-silent audio frames and no
+provider error. An initial check stopped at the first audio frame before the later
+acceptance acknowledgment; its overly strict timing assertion was corrected.
+326 offline tests pass. Physical spoken-result acceptance remains user-tested.
+
+Research navigation accepts “next page,” “show me the next page,” “go back,” etc.
+through the local fast path, with panel, clarification, stale-state and whole-request
+guards. Mirror hints reflect listening state: speak directly during a conversation,
+wake first in standby, or start voice on the companion when off/disarmed. Exception:
+current visible research pages grant a temporary local next/previous-page detector
+profile, so direct paging also works in armed standby while that view remains visible.
+It ends with the existing arming period, not a separate reading timeout.
+That path executes locally without opening Live; see [wake shortcuts](WAKE.md).
+
+Reference: [Live commentary event contract](https://developers.openai.com/api/reference/typescript/resources/live).
 
 ## Verification
 

@@ -74,16 +74,79 @@ the companion's off button is always the fallback.
 
 ## Detector and verification
 
+### Temporary interaction shortcuts (September 17)
+
+Armed local standby can temporarily recognize **next page** and **previous page**
+without a wake phrase. This first capability is limited to reversible research
+pagination. `wake-shortcuts.mjs` derives its allowlist from the currently visible,
+render-acknowledged mirror revision and available page directions. The detector
+receives a versioned per-stream keyword profile, not arbitrary model text.
+Detections commit a revision-checked local action; no API session, chime or speech
+response is necessary. The page turn provides feedback.
+
+Shortcuts remain available while the page is visible within the existing **30-minute
+explicit arming period**. The initial two-minute page timeout was removed after
+owner testing: reading a result should not silently require a wake phrase again.
+Navigation and heartbeats never extend the arming deadline. Leaving research, clarification,
+stale/hidden/disconnected surfaces, active voice, test-only mode and disarm disable
+direct shortcuts. A 1.5-second debounce and profile generations reject duplicate or
+queued detections from a previous page. Explicit arming limits still apply; no
+automatic microphone arming is introduced.
+
+This is keyword spotting, not transcript intent classification: another person,
+TV audio, or a quoted/negated phrase containing “next page” could turn a page during
+the window. Do not generalize it to destructive/sensitive actions. The local grammar
+is two phrases; broader natural phrasing remains available during a Live conversation.
+Future shortcut families need equivalent scope, expiry and safety checks.
+
+`npm run wake:check -- --shortcuts` passes seven synthetic offline checks for both
+directions, masked directions, disabled profiles, unrelated speech and continued
+Hey Mirror detection. Five deterministic shortcut tests cover local execution,
+render acknowledgments, expiry, stale generations, debounce, disarm and no cloud
+start. `wake.shortcut` logs allowlisted action/revision metadata, not transcripts.
+Actual room speech still needs owner acceptance.
+Deployment verification: the Android wrapper was refreshed, native capture and
+local detector progress were healthy in standby, and the actual mirror screenshot
+showed “Say next page” on the existing research overview. No paid conversation was
+opened by that verification; human direct-page recognition remains unconfirmed.
+
 Model: `sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01` (English), quantized
 chunk-16 encoder and joiner, unquantized decoder, CPU / one thread. The keyword
 tokens `▁HE Y ▁MI R R OR` were generated from its bundled `bpe.model` with
-SentencePiece 0.2.1; the tokenizer is not needed at runtime. Score 1.5, threshold
-0.25, one trailing blank. Stream initialization supplies synthetic silent left
+SentencePiece 0.2.1; the tokenizer is not needed at runtime. Score **1.8**, threshold
+**0.15**, one trailing blank (September 17 sensitivity increase from 1.5 / 0.25).
+This favors quieter/less-confident phrase matches; it does not raise microphone
+gain or remove the exact keyword requirement. Increased false wakes remain a
+tradeoff to measure in the actual room. All eight baseline synthetic checks pass,
+including a 0.1-gain sample and unrelated-speech negatives; normal-volume physical
+acceptance is still required. Stream initialization supplies synthetic silent left
 context so a phrase immediately after arming is detectable. Phrase/sensitivity
 are not user settings yet. `--model bilingual` retains the previous model for
 offline comparison if its files are already installed; new setup installs English only.
 
-- `npm test`: 149 passing deterministic tests across the repo, including lifecycle/route tests, start/disarm races, local-only
+### Quiet-speech follow-up (September 17)
+
+The owner still reported needing to shout. An expanded synthetic characterization
+(`node scripts/check-wake.mjs --sensitivity`) reproduced three misses across nine
+positive samples (three voices, amplitudes 0.1 / 0.03 / 0.01). Raising keyword boost
+to 2.5 and lowering threshold to 0.08 did not improve those misses, so that trial
+was reverted: the deployed score/threshold remain **1.8 / 0.15**.
+
+The local detector now applies up to **4× amplitude (+12 dB)** to each PCM frame,
+capped so its peak stays at or below 0.95 rather than clipping. Quiet/history-reset
+checks still use the original samples. This gain exists only in the Mac's local
+keyword detector: Android capture, cloud conversation input, speakers and stored
+audio policy are unchanged. It amplifies noise too; it cannot improve acoustic SNR.
+
+With that change all nine quiet positives and nine similar/non-wake phrases pass,
+as do the eight baseline and seven page-shortcut checks. This is synthetic evidence,
+not a measured room false-wake rate or a guarantee of human far-field recognition.
+The actual connection was capturing normally; an initial 40-second level-only
+sample had no detected wakes and no confirmed user test (max sampled RMS 127,
+peak 293). No microphone audio was saved. Local chime-only mode is used for the
+next normal-volume human check before claiming the issue resolved.
+
+- `npm test`: 326 passing deterministic tests across the repo, including lifecycle/route tests, start/disarm races, local-only
   audio routing, fresh-capture gating, no-API test mode, wake count/time limits,
   idle/busy handling, exact spoken end and unchanged manual voice flow.
 - `npm run wake:check`: optional **offline Mac** baseline with Samantha, Daniel

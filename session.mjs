@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import researchPages from './public/research-pages.cjs';
+import clockArt from './public/clock-art.cjs';
 import {newGame,advanceGame,gameReceipt} from './playroom.mjs';
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -37,6 +38,7 @@ export class Session {
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
     // Preserve legacy IDs so existing shortcuts and saved-view links still work.
+    this.state.clockDesign=clockArt.normalize(this.state.clockDesign);
     if(!this.state.reusableViews)this.state.reusableViews=(this.state.weatherViews||[]).map(v=>({id:v.id,version:1,kind:'weather',scope:v.locationId,spec:v.spec,createdAt:v.createdAt,parentId:null}));
     weatherViewIndex(this.state);
     this.state.viewOffer=null; // Retire old opt-in invitations under auto-save policy.
@@ -91,7 +93,7 @@ export class Session {
   }
   command(action, args = {}) {
     const before = structuredClone(this.state);
-    try { this.apply(action, args); this.state.assistant=null; this.state.revision++; this.save(); }
+    try { this.apply(action, args); if(action!=='set_clock')this.state.assistant=null; this.state.revision++; this.save(); }
     catch (error) { this.state = before; throw error; }
     this.onChange(this.state);
   }
@@ -225,6 +227,10 @@ export class Session {
     if (action === 'show') {
       if (!['home','time','timers','todos','weather','research','studio','workflows','functions','calendar','tasks','saved'].includes(args.panel)) throw new Error('Unknown panel');
       s.viewOffer=null;s.panel = args.panel;if(args.panel==='workflows')s.message='';return;
+    }
+    if(action==='set_clock'){
+      if(!clockArt.valid(args.config))throw Error('Invalid clock design');
+      s.clockDesign=structuredClone(args.config);return;
     }
     if (action === 'start_timer') {
       if (!Number.isInteger(args.seconds) || args.seconds < 1 || args.seconds > 86400 || s.timers.length >= 20) throw new Error('Use 1–86400 seconds; maximum 20 timers');

@@ -65,6 +65,23 @@ test('failed background task announces failure through a fresh session, not sile
   assert.equal(message.result.status,'needs_input');assert.match(message.result.message,/could not complete/);
   assert.equal(f.pending.length,1);
 });
+test('large research result resumes with a compact receipt and distinct acceptance/audio evidence',async t=>{
+  const f=await fixture(t),job=await f.request();await f.detach();
+  await f.finish(job,{status:'completed',message:'Your stadium research is ready.',researchArtifact:{cards:Array(6).fill({body:'Very long report '.repeat(500)})}});
+  const p=f.sockets[1],sent=results(p)[0];
+  assert.ok(Buffer.byteLength(sent.content)<=480);assert.ok(sent.event_id);
+  assert.doesNotMatch(sent.content,/researchArtifact|Very long report/);
+  const events=[];f.voice.active.trace.event=name=>events.push(name);f.mirror.output=()=>1;
+  p.emit('event',{type:'session.commentary.appended',client_event_id:'unrelated'});
+  assert.deepEqual(events,[]);
+  p.emit('event',{type:'session.commentary.appended',client_event_id:sent.event_id});
+  p.emit('event',{type:'session.output_audio.delta',delta:Buffer.alloc(640).toString('base64')});
+  assert.deepEqual(events,['background.accepted']);
+  const pcm=Buffer.alloc(640);pcm.writeInt16LE(1000,0);
+  p.emit('event',{type:'session.output_audio.delta',delta:pcm.toString('base64')});
+  p.emit('event',{type:'session.output_audio.delta',delta:pcm.toString('base64')});
+  assert.deepEqual(events,['background.accepted','background.audio_started']);
+});
 test('stop while detached cancels task and prevents late writes or automatic reconnect',async t=>{
   const f=await fixture(t),job=await f.request();await f.detach();
   await f.voice.stop();assert.equal(job.signal.aborted,true);await assert.rejects(job.beforeCommit,/cancelled/);

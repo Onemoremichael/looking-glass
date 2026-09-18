@@ -1,4 +1,5 @@
 import {WakeDetector} from './wake-detector.mjs';
+import {WakeShortcuts} from './wake-shortcuts.mjs';
 
 export function readyChime(){
   const pcm=Buffer.alloc(9600); // 300 ms, quiet two-note local cue; no asset/API.
@@ -12,9 +13,13 @@ export function readyChime(){
 // Explicit, finite arming. Standby is local and ephemeral; wake sessions have a
 // server owner, NOT an artificial browser heartbeat. No automatic API retries.
 export class Wake {
-  constructor({voice,mirror,detectorFactory=()=>new WakeDetector(),publish=()=>{},now=Date.now}){
+  constructor({voice,mirror,surfaces,detectorFactory=()=>new WakeDetector(),publish=()=>{},now=Date.now}){
     Object.assign(this,{voice,mirror,detectorFactory,publish,now});
     this.state={enabled:false,phase:'off',phrase:'Hey Mirror',count:0};this.generation=0;
+    this.shortcuts=new WakeShortcuts({session:voice.session,surfaces,now,deadline:()=>this.state.expiresAt,changed:profile=>{
+      try{this.detector?.setShortcuts?.(profile.mask,profile.generation);}catch{void this.disable('detector_error');return;}
+      this.update({shortcuts:profile.commands,shortcutRevision:profile.revision,shortcutsExpireAt:profile.expiresAt});
+    }});
     voice.resumeBackground=origin=>this.resumeBackground(origin);
     this.audio=pcm=>{if(this.state.phase==='standby'){try{this.detector.feed(pcm);}catch{void this.disable('detector_error');}}};
     this.disconnected=()=>void this.disable('mirror_disconnected');
@@ -30,17 +35,22 @@ export class Wake {
     this.update({enabled:true,phase:'starting',test,count:0,reason:null,expiresAt:this.now()+30*60*1000});
     const detector=this.detector=this.detectorFactory();
     detector.on('wake',()=>void this.trigger());
+    detector.on('shortcut',event=>{
+      if(this.shortcuts.act(event,this.shortcutsArmed()))this.voice.telemetry?.start('wake.shortcut',{action:'research_page',revision:this.voice.session.state.revision}).end({outcome:'completed'});
+    });
     detector.on('fault',()=>void this.disable('detector_error'));
     try{
       await detector.start();if(generation!==this.generation){detector.close();return;}
       this.standby();this.timer=setInterval(()=>this.tick(),500);
     }catch(e){if(generation===this.generation)await this.disable('detector_error');throw e;}
   }
-  standby(){this.detector.reset();this.mirror.standby();this.update({phase:'standby'});}
+  shortcutsArmed(){return this.state.enabled&&this.state.phase==='standby'&&!this.state.test&&!this.voice.active&&this.now()<this.state.expiresAt;}
+  standby(){this.detector.reset();this.mirror.standby();this.update({phase:'standby'});this.shortcuts.sync(this.shortcutsArmed());}
   async trigger(){
     if(!this.state.enabled||this.state.phase!=='standby'||this.voice.active)return;
     const generation=this.generation;
     this.update({phase:'connecting',count:this.state.count+1});
+    this.shortcuts.sync(false);
     try{
       this.mirror.connecting();this.detector.reset();
       if(this.state.test){
@@ -77,6 +87,7 @@ export class Wake {
   tick(){
     if(!this.state.enabled)return;
     if(this.now()>=this.state.expiresAt){void this.disable('arming_expired');return;}
+    this.shortcuts.sync(this.shortcutsArmed());
     if(this.state.phase==='standby'&&this.now()-this.detector.lastProgress>5000){void this.disable('audio_or_detector_stalled');return;}
     if(this.state.phase==='conversation'&&!this.voice.active){
       if(['game_complete','game_stopped','game_wrap_timeout'].includes(this.voice.state.stopReason)){void this.disable('game_finished');return;}
@@ -95,6 +106,7 @@ export class Wake {
     this.voice.suppressBackground?.({cancel:['user','shutdown','spoken_disable'].includes(reason)});
     ++this.generation;clearInterval(this.timer);clearTimeout(this.cueTimer);this.detector?.close();
     this.update({enabled:false,phase:'off',reason,expiresAt:null});
+    this.shortcuts.clear();
     if(this.voice.active?.owner==='wake')await this.voice.stop(undefined,'wake_disabled');
     else if(!this.voice.active)this.mirror?.stop();
   }

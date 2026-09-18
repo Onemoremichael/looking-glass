@@ -44,8 +44,10 @@ export function researchView(state,now=Date.now()){
 export function researchIntent(text,state){
   if(typeof text!=='string'||state.assistant?.status==='clarify')return null;
   const s=framing(text);
-  if(['next page','next cards','more results'].includes(s)&&state.panel==='research')return {action:'research_page',direction:'next'};
-  if(['previous page','previous cards'].includes(s)&&state.panel==='research')return {action:'research_page',direction:'previous'};
+  if(state.panel==='research'&&state.research){
+    if(/^(?:(?:go|move|turn|skip) (?:to )?(?:the )?|show (?:me )?(?:the )?)?(?:next(?: page| cards| results)?|more results)$/.test(s))return {action:'research_page',direction:'next'};
+    if(/^(?:(?:go|move|turn) (?:to )?(?:the )?|show (?:me )?(?:the )?)?(?:previous(?: page| cards)?|back(?: a page)?)$/.test(s))return {action:'research_page',direction:'previous'};
+  }
   const match=s.match(/^(?:open|show|bring up|refresh|update) (?:my |the )?(.+)$/);
   if(!match)return null;
   const views=(state.reusableViews||[]).filter(v=>v.kind==='research'&&framing(v.spec.title)===match[1]);

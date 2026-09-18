@@ -3,6 +3,12 @@
 A practical assistant for a recovered, non-touch Android Mirror. Familiar tools
 should be fast; new requests can become reusable, adaptable capabilities.
 
+**Clock studio:** open `/clocks` (linked from the companion) for seven analog/digital
+faces, draggable positioning, scale, four accents, independent weekday/date toggles,
+seconds and 12/24-hour
+controls. Designs save automatically and render on the existing Android wrapper.
+See [clock design and verification](docs/CLOCKS.md).
+
 ## Starter scope
 
 Ship time/date, timers, to-dos, weather, read-only calendar review, and display
@@ -36,7 +42,7 @@ display. Voice can use the Mac or the native USB Mirror audio bridge. Active tim
 stay visible across panels. The mirror has a small active-conversation indicator,
 hidden when capture is off, except for a visible animated **Working in background**
 badge while delegated work runs, or **Result ready** while an announcement waits.
-Local wake standby retains its static label. Setup controls remain on the companion. A lost display
+Local wake standby uses a small static dot, without a label. Setup controls remain on the companion. A lost display
 connection still shows a stale-data warning.
 
 Native Mirror voice can close after 10 seconds of inactivity while delegated work
@@ -166,6 +172,14 @@ enable it explicitly in the companion. Standby audio stays on the Mac; wake star
 a bounded Live session on the Mirror mic/speakers. Wait for the chime, ask, and say
 “That’s all” to return to standby. A local-only phrase-test mode avoids API charges.
 No camera or automatic arming at startup. Turn wake microphone off to stop capture.
+
+While wake listening is armed, a visible paginated research result temporarily adds
+**“next page” / “previous page”** as local shortcuts—no “Hey Mirror,” cloud session,
+or spoken reply required. Only available directions are enabled, for as long as the
+view is visible within the explicit arming period; hidden/stale displays, clarification and disarm disable the
+shortcuts. The footer reflects whether direct navigation is available. These are
+phrase detectors, not speaker authentication or protection against quoted commands.
+See [wake behavior and testing](docs/WAKE.md).
 
 ## API setup and remaining connections
 

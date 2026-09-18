@@ -13,6 +13,14 @@ import {presentation} from '../assistant-contract.mjs';
 import {publicSource,validateResearchBoard,researchIntent} from '../research-board.mjs';
 const board=()=>({spec:{title:'Gators this week',query:'UF sports this week',layout:'agenda'},summary:'Two events to explore.',caveat:'Check times before leaving.',cards:Array.from({length:4},(_,i)=>({heading:'Event '+i,kicker:'Saturday · ET',body:'A fixture description.',detail:'Official schedule',sourceIds:['uf']})),sources:[{id:'uf',title:'Official schedule',url:'https://floridagators.com/sports/football/schedule'}]});
 const decision=b=>({status:'execute',outcome:'Research sports',message:'Ready',actions:[{action:'compose_research',board:b}],options:[],selectedOptionId:null,quickAction:null});
+test('research page fast routes accept natural navigation, not negation or unrelated commands',()=>{
+  const state={panel:'research',research:board()};
+  for(const text of ['next page','Next','Could you show me the next page please?','go to the next page','more results'])assert.equal(researchIntent(text,state)?.direction,'next',text);
+  for(const text of ['previous page','go back','back a page','show the previous page'])assert.equal(researchIntent(text,state)?.direction,'previous',text);
+  for(const text of ['do not go to the next page','next week','next page and delete it','my wife said next page','last page'])assert.equal(researchIntent(text,state),null,text);
+  assert.equal(researchIntent('next page',{...state,panel:'weather'}),null);
+  assert.equal(researchIntent('next page',{...state,assistant:{status:'clarify'}}),null);
+});
 test('research requires bounded sourced cards, safe URLs and opened provenance',()=>{
   for(const url of ['javascript:alert(1)','http://localhost/a','http://127.0.0.1','http://[::1]','https://u:p@site.com','https://site.local','file:///a'])assert.equal(publicSource(url),false);
   assert.throws(()=>validateResearchBoard(board(),{openedUrls:new Set()}),/not opened/);

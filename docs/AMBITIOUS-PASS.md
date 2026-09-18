@@ -139,6 +139,21 @@ non-touch mirror, old Android compatibility, native mic/speakers, and budget.
    tests pass. New safe stage/error telemetry pinpoints future failures. The mirror
    and companion retain a visible background-work indicator while voice is off.
 
+   **Spoken result / navigation / sensitivity follow-up:** owner confirmed research
+   rendered. Its reconnect failed immediately, leaving no listener for next-page
+   speech. Full-artifact commentary exceeded the documented limit; now a <=480-byte
+   summary-only envelope is used. A bounded paid check received acceptance and
+   non-silent GPT-Live audio without errors, not physical audibility proof. 326
+   offline tests and eight synthetic wake checks pass. Page navigation remains
+   local with broader phrasing and state-aware hints. Background status moved to
+   lower left, apart from upper-right native voice. Wake score/threshold changed
+   to 1.8/0.15; normal-volume and false-wake room testing remain required.
+   Visible research pages grant next/previous-page local wake shortcuts within the
+   explicit arming period, without a cloud session. The initial two-minute page
+   timeout was removed after owner feedback. Revision/visibility,
+   direction, generation, expiry and debounce checks constrain execution. Seven
+   synthetic shortcut checks pass; physical speech acceptance remains open.
+
 After each pass: update docs with evidence and limitations, commit, push, merge.
 Owner's closure instruction: finish the functionality already in flight, then
 close the goal. Prioritize completion/acceptance over adding new feature scope.
