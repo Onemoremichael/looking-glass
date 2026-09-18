@@ -11,8 +11,24 @@ import {Voice} from '../voice.mjs';
 import {Telemetry} from '../telemetry.mjs';
 import {presentation} from '../assistant-contract.mjs';
 import {publicSource,validateResearchBoard,researchIntent} from '../research-board.mjs';
-const board=()=>({spec:{title:'Gators this week',query:'UF sports this week',layout:'agenda'},summary:'Two events to explore.',caveat:'Check times before leaving.',cards:Array.from({length:4},(_,i)=>({heading:'Event '+i,kicker:'Saturday · ET',body:'A fixture description.',detail:'Official schedule',sourceIds:['uf']})),sources:[{id:'uf',title:'Official schedule',url:'https://floridagators.com/sports/football/schedule'}]});
+const board=()=>({spec:{title:'Gators this week',query:'UF sports this week',layout:'briefing'},summary:'Two events to explore.',caveat:'Check times before leaving.',cards:Array.from({length:4},(_,i)=>({heading:'Event '+i,kicker:'Saturday · ET',body:'A fixture description.',detail:'Official schedule',sourceIds:['uf']})),sources:[{id:'uf',title:'Official schedule',url:'https://floridagators.com/sports/football/schedule'}]});
 const decision=b=>({status:'execute',outcome:'Research sports',message:'Ready',actions:[{action:'compose_research',board:b}],options:[],selectedOptionId:null,quickAction:null});
+test('explicit research workflows get a bounded larger lookup budget, ordinary turns do not',async()=>{
+  for(const [workflow,count,accepted] of [[false,10,true],[false,11,false],[true,24,true],[true,25,false]]){
+    const stream={controller:{abort(){}},async *[Symbol.asyncIterator](){
+      yield {type:'agent.session.created',session:{id:'test'}};
+      for(let i=0;i<count;i++)yield {type:'agent.session.turn.item.done',item:{type:'web_search_call',status:'completed',action:{type:'open_page',url:board().sources[0].url}}};
+      yield {type:'agent.session.turn.output_text.done',text:JSON.stringify({decision:decision(board())})};yield {type:'agent.session.turn.completed'};
+    }};
+    const planner=new AgentsPlanner({client:{beta:{agents:{sessions:{create:async body=>{
+      assert.equal(JSON.parse(body.input).researchBudget.maxToolCalls,workflow?24:10);return stream;
+    },events:{create:async()=>{}},delete:async()=>{}}}}},budget:{reserve:()=>1,finishAgent(){}}});
+    const context=workflow?{workflowContext:{currentStepId:'r',steps:[{id:'r',kind:'research'}]}}:{};
+    if(accepted)assert.equal((await planner.decide(context)).actions[0].action,'compose_research');
+    else await assert.rejects(planner.decide(context),{code:'research_limit'});
+    await planner.drain();
+  }
+});
 test('research page fast routes accept natural navigation, not negation or unrelated commands',()=>{
   const state={panel:'research',research:board()};
   for(const text of ['next page','Next','Could you show me the next page please?','go to the next page','more results'])assert.equal(researchIntent(text,state)?.direction,'next',text);
@@ -53,6 +69,7 @@ test('research renderer escapes content, paginates equally, and has no mirror co
   const mirror=ctx.window.GlassResearch.render(b,false),remote=ctx.window.GlassResearch.render(b,true);
   assert.match(mirror,/&lt;script&gt;/);assert.doesNotMatch(mirror,/<(?:a |button|input|script)/);
   assert.doesNotMatch(mirror,/Event 3/);assert.match(remote,/rel="noopener noreferrer"/);
+  assert.match(remote,/data-research-page="next"/);assert.match(remote,/data-research-page="previous" disabled/);
   b.page=1;assert.match(ctx.window.GlassResearch.render(b,false),/Event 3/);
   assert.doesNotMatch(readFileSync(new URL('../public/research-ui.js',import.meta.url),'utf8'),/\b(?:const|let)\b|=>/);
 });

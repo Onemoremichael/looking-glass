@@ -8,8 +8,9 @@ import {imageIntent} from './image-studio.mjs';
 import {workflowIntent} from './workflows.mjs';
 import {analyzeFunctionReuse} from './function-reuse.mjs';
 import {canRepairFunction,functionRepairContext,validateFunctionRepair} from './function-repair.mjs';
+import {gatorsBoard,isGatorsShortcut} from './gators-schedule.mjs';
 export class Assistant {
-  constructor({session,planner,surfaces,telemetry,weather,studio}){Object.assign(this,{session,planner,surfaces,telemetry,weather,studio});this.inflight=new Map();}
+  constructor({session,planner,surfaces,telemetry,weather,studio,gatorsSchedule=gatorsBoard}){Object.assign(this,{session,planner,surfaces,telemetry,weather,studio,gatorsSchedule});this.inflight=new Map();}
   execute(id,utterance,{signal,trace,onProgress=()=>{},beforeCommit=async()=>{},workflowContext=null,guardDecision=()=>{}}={}) {
     const workflowReceipt=(this.session.state.workflowReceipts||[]).find(r=>r.id===id);if(workflowReceipt)return Promise.resolve(workflowReceipt.result);
     const prior=(this.session.state.assistantReceipts||[]).find(r=>r.id===id);if(prior)return Promise.resolve(prior.result);
@@ -25,6 +26,13 @@ export class Assistant {
     }
     let researchRequest=null;
     const workflowStep=workflowContext?.steps.find(s=>s.id===workflowContext.currentStepId);
+    if(workflowStep?.kind==='research'&&isGatorsShortcut(utterance)){
+      const revision=this.session.state.revision;
+      const board=await this.gatorsSchedule({now:this.session.now(),signal});
+      const decision=validateDecision({status:'execute',outcome:'Find UF home events to attend in Gainesville',message:'The home-events agenda is ready. Check the listed schedule links for admission and updates.',actions:[{action:'compose_research',board}],options:[],selectedOptionId:null,quickAction:null});
+      guardDecision(decision);await beforeCommit();if(signal?.aborted)throw Error('Request cancelled');
+      return this.session.commitDecision(id,revision,decision,utterance);
+    }
     if(workflowStep?.kind==='weather'&&this.weather){
       onProgress({stage:'checking_data'});await this.weather.refresh();
       if(signal?.aborted)throw Error('Request cancelled');
@@ -92,7 +100,15 @@ export class Assistant {
       // A pure workflow calculation is defined by its run, not unrelated chat,
       // current weather, ambient time or whatever happens to be on the mirror.
       // This bounded planning context is also the contract for learned executors.
-      const planningContext=workflowStep?.kind==='custom'?{
+      const planningContext=workflowStep?.kind==='research'?{
+        // A research step is a fresh retrieval for this run's scope, not a
+        // re-render of an unrelated board left on screen. Previous step evidence
+        // remains in workflowContext; ambient cached facts/history do not.
+        utterance,workflowContext,now:aliased.now,timeZone:aliased.timeZone,
+        capabilities:aliased.capabilities,durability:aliased.durability,
+        researchRequest:null,research:null,researchCache:[],reusableViews:[],history:[],
+        freshResearchRequired:true,
+      }:workflowStep?.kind==='custom'?{
         utterance,workflowContext,resolvedSelection,customFunctions:aliased.customFunctions,
         reusableViews:aliased.reusableViews.filter(v=>v.kind==='function'),
         durability:aliased.durability,capabilities:aliased.capabilities,

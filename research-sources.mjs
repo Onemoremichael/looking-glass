@@ -14,7 +14,7 @@ export function publicIPv4(ip){
 // Pin DNS for each request, validate each redirect, never forward cookies/auth,
 // and only read a bounded text page. This is not a general proxy endpoint.
 export const SOURCE_PREFIX_BYTES=512*1024;
-export async function readPublicPage(value,{signal,resolve=resolve4,request}={}){
+export async function readPublicPage(value,{signal,resolve=resolve4,request,retainText=false}={}){
   let current=value;
   const deadline=AbortSignal.timeout(10000),combined=signal?AbortSignal.any([signal,deadline]):deadline;
   for(let hop=0;hop<3;hop++){
@@ -36,15 +36,16 @@ export async function readPublicPage(value,{signal,resolve=resolve4,request}={})
         // This check establishes public reachability, not claim verification.
         // Large legitimate HTML pages need only a bounded nonempty prefix;
         // stop the transfer at the cap instead of rejecting their total size.
-        let size=0,nonempty=false,finished=false;
+        let size=0,nonempty=false,finished=false;const chunks=[];
         const finish=truncated=>{
           if(finished)return;finished=true;
-          if(nonempty)resolveResult({url:current,bytes:size,truncated});
+          if(nonempty)resolveResult({url:current,bytes:size,truncated,...(retainText?{text:Buffer.concat(chunks).toString('utf8')}:{})});
           else reject(Error('Empty research source'));
         };
         res.on('data',chunk=>{
           if(finished)return;
           const prefix=chunk.subarray(0,SOURCE_PREFIX_BYTES-size);
+          if(retainText)chunks.push(prefix);
           size+=prefix.length;nonempty=nonempty||!!prefix.toString('utf8').trim();
           if(size>=SOURCE_PREFIX_BYTES){finish(true);req.destroy();}
         });

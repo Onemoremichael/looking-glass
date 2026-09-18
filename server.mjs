@@ -20,9 +20,11 @@ import {animals} from './playroom.mjs';
 
 const files = { '/': 'index.html', '/remote': 'remote.html', '/surface.js':'surface.js', '/display.js': 'display.js', '/remote.js': 'remote.js', '/voice-client.js':'voice-client.js', '/voice.css':'voice.css', '/style.css': 'style.css', '/diagnostics':'diagnostics.html','/diagnostics.js':'diagnostics.js' };
 const types = { html: 'text/html', js: 'text/javascript', cjs: 'text/javascript', css: 'text/css', png: 'image/png' };
+files['/dom-patch.js']='dom-patch.cjs';
 Object.assign(files,{'/clocks':'clocks.html','/clock-art.js':'clock-art.cjs','/clock-controls.js':'clock-controls.js','/clocks.css':'clocks.css'});
 files['/assets/clocks/tourbillon-bezel-v1.png']='assets/clocks/tourbillon-bezel-v1.png';
 files['/assets/clocks/folio-paper-v1.png']='assets/clocks/folio-paper-v1.png';
+files['/gators-flow.js']='gators-flow.cjs';
 Object.assign(files,{'/weather-ui.js':'weather-ui.js','/weather.css':'weather.css','/weather-controls.js':'weather-controls.js'});
 Object.assign(files,{'/research-pages.js':'research-pages.cjs','/research-ui.js':'research-ui.js','/research.css':'research.css'});
 Object.assign(files,{'/playroom-ui.js':'playroom-ui.js','/playroom.css':'playroom.css','/playroom-controls.js':'playroom-controls.js'});
@@ -44,7 +46,7 @@ export function createApp({ origins = [], sessionOptions = {}, voiceOptions = {}
   const weather=new Weather({session,...weatherOptions});weather.start();
   const budgetPath=fileURLToPath(new URL('./data/api-test-budget.json',import.meta.url));
   const studio=new ImageStudio({session,budget:new ApiBudget(budgetPath),directory:fileURLToPath(new URL('./data/artwork',import.meta.url)),telemetry,...studioOptions});
-  const assistant=assistantOptions?new Assistant({session,surfaces,telemetry,weather,studio,planner:assistantOptions.planner||new AgentsPlanner({budget:new ApiBudget(budgetPath),telemetry})}):undefined;
+  const assistant=assistantOptions?new Assistant({session,surfaces,telemetry,weather,studio,gatorsSchedule:assistantOptions.gatorsSchedule,planner:assistantOptions.planner||new AgentsPlanner({budget:new ApiBudget(budgetPath),telemetry})}):undefined;
   const workflows=new Workflows({session,assistant,studio,telemetry});if(assistant)assistant.workflows=workflows;
   const functions=new CustomFunctions({session,telemetry});if(assistant)assistant.functions=functions;
   const voice = new Voice({ session, telemetry, assistant, budgetPath, ...voiceOptions,

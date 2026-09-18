@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { presentation } from '../assistant-contract.mjs';
 import { Session } from '../session.mjs';
+import GlassDOM from '../public/dom-patch.cjs';
 test('mirror contains no interactive elements or command transport', () => {
   for (const file of ['index.html', 'display.js']) {
     const source = readFileSync(new URL('../public/' + file, import.meta.url), 'utf8');
@@ -42,7 +43,7 @@ function clockOptions(search){
   }
   runInNewContext(readFileSync(new URL('../public/display.js',import.meta.url),'utf8'),{
     location:{search},Intl,Date:Clock,setInterval(){},
-    window:{GlassSurface:{subscribe(){}}},
+    window:{GlassDOM,GlassSurface:{subscribe(){}}},
     document:{getElementById:id=>elements[id]??={},querySelectorAll:()=>[]}
   });
   return {time:JSON.parse(elements.clock.textContent),date:JSON.parse(elements.date.textContent)};
@@ -64,7 +65,7 @@ test('native conversation indicator replaces routine footer but preserves action
   const elements={};let handlers;
   runInNewContext(readFileSync(new URL('../public/display.js',import.meta.url),'utf8'),{
     location:{search:''},Intl,Date,setInterval(){},
-    window:{GlassSurface:{subscribe(value){handlers=value;}}},
+    window:{GlassDOM,GlassSurface:{subscribe(value){handlers=value;}}},
     document:{getElementById:id=>elements[id]??={setAttribute(){}},querySelectorAll:()=>[]}
   });
   for(const phase of ['listening','speaking','muted','off']){
@@ -84,7 +85,7 @@ test('background work stays visible without cloud voice, distinguishes ready, cl
   const elements={};let handlers;
   runInNewContext(readFileSync(new URL('../public/display.js',import.meta.url),'utf8'),{
     location:{search:''},Intl,Date,setInterval(){},
-    window:{GlassSurface:{subscribe(value){handlers=value;}}},
+    window:{GlassDOM,GlassSurface:{subscribe(value){handlers=value;}}},
     document:{getElementById:id=>elements[id]??={setAttribute(k,v){this[k]=v;}},querySelectorAll:()=>[]}
   });
   for(const phase of ['off','listening','thinking','speaking','stopping']){

@@ -42,3 +42,9 @@ test('small nonempty pages keep complete evidence; blank prefixes and bad respon
     await assert.rejects(readPublicPage('https://source.example.com',p),/Empty|unavailable/);
   }
 });
+test('opt-in table content retention still respects the byte cap',async()=>{
+  const p=page(['<table>',Buffer.alloc(SOURCE_PREFIX_BYTES,65),'unread']);
+  const result=await readPublicPage('https://source.example.com',{...p,retainText:true});
+  assert.equal(Buffer.byteLength(result.text),SOURCE_PREFIX_BYTES);assert.equal(result.truncated,true);assert.doesNotMatch(result.text,/unread/);
+  assert.equal((await readPublicPage('https://source.example.com',page(['public']))).text,undefined);
+});

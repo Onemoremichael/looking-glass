@@ -24,6 +24,6 @@
   window.GlassWeatherControls={render:function(s){
     state=s;root.hidden=s.panel!=='weather';var w=s.weather||{locations:[],units:'fahrenheit'};
     document.getElementById('weather-units').value=w.units;
-    document.getElementById('weather-places').innerHTML=w.locations.map(function(p){return '<span><button type="button" class="subtle" data-weather-place="'+esc(p.id)+'" aria-pressed="'+(p.id===w.activeId)+'" title="'+esc(p.label)+'">'+esc(p.name)+'</button> <button type="button" class="subtle" data-weather-remove="'+esc(p.id)+'" aria-label="Remove '+esc(p.label)+'">×</button></span>';}).join('');
+    window.GlassDOM.patch(document.getElementById('weather-places'),w.locations.map(function(p){return '<span data-render-key="place:'+esc(p.id)+'"><button type="button" class="subtle" data-weather-place="'+esc(p.id)+'" aria-pressed="'+(p.id===w.activeId)+'" title="'+esc(p.label)+'">'+esc(p.name)+'</button> <button type="button" class="subtle" data-weather-remove="'+esc(p.id)+'" aria-label="Remove '+esc(p.label)+'">×</button></span>';}).join(''));
   }};
 }());

@@ -60,17 +60,19 @@ export class AgentsPlanner {
     const timing={planningMs:null,readyMs:null,cleanupMs:null,totalMs:null};this.lastTiming=timing;
     const planning=this.telemetry?.start('agent.planning',{},trace);
     const pureWorkflow=!!context.functionRepair||context.workflowContext?.steps.find(s=>s.id===context.workflowContext.currentStepId)?.kind==='custom';
+    const researchWorkflow=context.workflowContext?.steps.find(s=>s.id===context.workflowContext.currentStepId)?.kind==='research';
+    const searchLimit=researchWorkflow?24:10;
     try {
       stream=await this.client.beta.agents.sessions.create({
         agent:{model:this.model,instructions:assistantInstructions+'\n'+studioInstructions+'\n'+workflowInstructions+'\n'+functionInstructions+'\nReturn a JSON object containing exactly one decision field matching the supplied schema. Execute decisions require actions and no options; clarification, answer and unsupported decisions have no actions. Creating a plan with missing inputs is an execute decision: the saved plan itself will ask its input questions.',reasoning:{effort:this.effort},tools:pureWorkflow?[]:[{type:'web_search',mode:'live',context_size:'medium'}],multi_agent:{enabled:false},text:{format:{type:'json_schema',schema:plannerResponseSchema},verbosity:'low'}},
-        environment:{type:'none'},input:JSON.stringify(context),stream:true,
+        environment:{type:'none'},input:JSON.stringify({...context,researchBudget:{maxToolCalls:searchLimit,instruction:'Use fresh search for research. Prefer authoritative composite sources, verify citations, and finish within the lookup budget. Disclose incomplete coverage; never equate missing evidence with no events.'}}),stream:true,
       },{signal:combined});
       for await(const event of stream) {
         const nextId=event.session_id||event.session?.id;
         if(nextId&&!sessionId){sessionId=nextId;this.budget.identifyAgent?.(reservation,sessionId);}
         if(event.type==='agent.session.turn.item.done'&&event.item?.type==='web_search_call'&&event.item.status==='completed'){
           evidence.calls.push(event.item.action);
-          if(++searches>10)throw Object.assign(Error('Research tool limit reached'),{code:'research_limit'});
+          if(++searches>searchLimit)throw Object.assign(Error('Research tool limit reached'),{code:'research_limit'});
           if(event.item.action?.type==='open_page'&&event.item.action.url)openedUrls.add(event.item.action.url);
           planning?.event('research.source_checked',{source_check:event.item.action?.type==='open_page'?'provider_open':event.item.action?.type==='search'?'provider_search':'provider_other',source_count:searches});
         }

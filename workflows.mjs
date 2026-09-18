@@ -125,8 +125,19 @@ export class Workflows {
   start(id){
     const active=this.active={id,controller:new AbortController()};
     try{active.trace=this.telemetry?.start('workflow.run',{step_count:this.get(id).steps.length});}catch{}
-    active.promise=Promise.resolve().then(()=>this.run(active)).catch(()=>{
-      if(!active.controller.signal.aborted)this.update(id,r=>{r.status='blocked';r.detail='Work stopped before completion. Review the current step, then resume explicitly.';const step=r.steps.find(s=>s.status!=='completed');if(step){step.status='blocked';step.detail=r.detail;}});
+    active.promise=Promise.resolve().then(()=>this.run(active)).catch(error=>{
+      // Surface only known local failures, never raw provider text or private URLs.
+      const known={
+        'Display changed while deciding':'The display changed during research. Resume to retry against the current state.',
+        'One artifact per workflow step':'The agent proposed more than one result for this step. Resume to retry.',
+        'Step proposed an action outside its scope':'The agent proposed an action outside this step. Nothing was applied.',
+        'Research needs a fresh lookup; ask to refresh this view':'The saved research is stale. Resume to fetch current information.',
+        'Invalid research board':'The research result did not meet the display format. Resume to retry.',
+        'Unknown choice':'The agent referenced an inactive choice. Resume to retry.'
+      };
+      const failures={research_limit:'Research reached its lookup limit before completing. Narrow the scope or resume explicitly.',research_provenance_failed:'Research sources were not verified. No new result was published. Resume to retry.',agent_interrupted:'Research did not finish within the available time, or was interrupted. Resume explicitly to retry.'};
+      const detail=known[error.message]||failures[error.code]||'Work stopped before completion. Review the current step, then resume explicitly.';
+      if(!active.controller.signal.aborted)this.update(id,r=>{r.status='blocked';r.detail=detail;const step=r.steps.find(s=>s.status!=='completed');if(step){step.status='blocked';step.detail=r.detail;}});
     }).finally(()=>{
       const status=this.get(id).status;
       try{active.trace?.end({outcome:active.controller.signal.aborted?'cancelled':status==='completed'?'completed':status==='needs_input'?'needs_input':'error'});}catch{}

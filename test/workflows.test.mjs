@@ -25,6 +25,11 @@ function fixture(t,decide=todo){
 }
 async function settle(w){if(w.active)await w.active.promise;}
 function create(f,s=spec([step('todos','Add packing items'),step('confirm','Pack your bag')]),values=[]){return f.workflows.handle('create',{action:'create_workflow',spec:s,values,parentId:null});}
+test('research lookup exhaustion is actionable without exposing raw provider details',async t=>{
+  const f=fixture(t,()=>{throw Object.assign(Error('PRIVATE provider payload'),{code:'research_limit'});});
+  const r=create(f,spec([step('research','Find events')]));await settle(f.workflows);
+  const run=f.workflows.get(r.runId);assert.equal(run.status,'blocked');assert.match(run.detail,/lookup limit/);assert.doesNotMatch(JSON.stringify(run),/PRIVATE/);
+});
 test('multi-step run records actual tool results, waits for human confirmation and persists',async t=>{
   const f=fixture(t),r=create(f);await settle(f.workflows);
   let run=f.workflows.get(r.runId);assert.equal(run.status,'needs_input');assert.equal(run.steps[0].status,'completed');assert.equal(run.steps[1].status,'needs_input');
