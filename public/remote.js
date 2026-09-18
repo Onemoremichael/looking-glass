@@ -10,7 +10,7 @@
   function render(){
     var panels=['home','time','timers','todos','weather','research','studio','workflows','functions','calendar','tasks','saved'];
     document.getElementById('nav').innerHTML=panels.map(function(p){return '<button data-panel="'+p+'" aria-current="'+(p===state.panel)+'">'+({todos:'To-dos',tasks:'Requests',saved:'Saved views'}[p]||p.charAt(0).toUpperCase()+p.slice(1))+'</button>';}).join('');
-    document.getElementById('nav').innerHTML+='<a class="subtle" href="/clocks">Clock studio ↗</a>';
+    document.getElementById('nav').innerHTML+='<a class="nav-link" href="/clocks">Clock studio ↗</a>';
     var message=document.getElementById('message');
     message.textContent=state.assistant?'':state.message;message.hidden=!!state.assistant;
     var html='',savedCount=state.recipes.length+(state.weatherViews||[]).length;
