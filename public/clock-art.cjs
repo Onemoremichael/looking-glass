@@ -54,9 +54,9 @@
     }catch(e){}
     return {h:h,m:m,s:s,label:label,weekday:weekday,day:day,month:['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][month],weekdayName:['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'][weekday]};
   }
-  function scene(c,d,zone,flip){
+  function scene(c,d,zone,flip,material){
     c=normalize(c);var t=time(d,zone),a=colors[c.accent],ink='#f1f1e8',dim='#7e958f',out='';
-    var materialId='movement-'+(++materialSerial),gold='url(#'+materialId+'-gold)',steel='url(#'+materialId+'-steel)',plate='url(#'+materialId+'-plate)',ruby='url(#'+materialId+'-ruby)';
+    var materialId=material||'movement-'+(++materialSerial),gold='url(#'+materialId+'-gold)',steel='url(#'+materialId+'-steel)',plate='url(#'+materialId+'-plate)',ruby='url(#'+materialId+'-ruby)';
     var hour=t.h%12+t.m/60,minute=t.m+(c.seconds?t.s/60:0),h=c.hour24?t.h:(t.h%12||12),digital=pad(h)+':'+pad(t.m);
     function circle(r,color,width){return '<circle cx="300" cy="300" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="'+width+'"/>';}
     function text(x,y,value,size,color,family,weight){return '<text x="'+x+'" y="'+y+'" text-anchor="middle" font-size="'+size+'" fill="'+color+'" font-family="'+(family||'Arial, sans-serif')+'" font-weight="'+(weight||'400')+'">'+esc(value)+'</text>';}
@@ -178,8 +178,8 @@
       out+=jewel(-12,0,4.3)+jewel(44,0,2.7)+jewel(18,0,2)+screw(-65,-24,3);
       out+='<path d="M 0 -74 l -3.5 -8 h 7 Z" fill="'+ink+'"/></g></g>';
       // Skeletonized lance hands sit above the mechanism, readable at a distance.
-      out+='<path d="M 300 320 L 291 274 L 300 166 L 309 274 Z" fill="#0b1710" stroke="'+ink+'" stroke-width="3" transform="rotate('+(hour*30)+' 300 300)"/>';
-      out+='<path d="M 300 324 L 293 265 L 300 93 L 307 265 Z" fill="'+gold+'" stroke="'+ink+'" stroke-width="1" transform="rotate('+(minute*6)+' 300 300)"/>';
+      out+='<path data-clock-hand="hour" d="M 300 320 L 291 274 L 300 166 L 309 274 Z" fill="#0b1710" stroke="'+ink+'" stroke-width="3" transform="rotate('+(hour*30)+' 300 300)"/>';
+      out+='<path data-clock-hand="minute" d="M 300 324 L 293 265 L 300 93 L 307 265 Z" fill="'+gold+'" stroke="'+ink+'" stroke-width="1" transform="rotate('+(minute*6)+' 300 300)"/>';
       out+=dot(0,0,11,steel)+dot(0,0,6,ruby)+text(300,214,c.hour24?pad(t.h)+':'+pad(t.m):t.h<12?'AM':'PM',11,a)+'</g>';
     }else if(c.style==='monolith'){
       out=text(300,270,pad(h),246,ink,'Arial, sans-serif','700')+text(300,478,pad(t.m),246,a,'Arial, sans-serif','700');
@@ -194,7 +194,7 @@
     }else{
       if(!c.hour24)out+=text(300,133,t.h<12?'AM':'PM',18,a);
       var previous=flip&&flip.from?time(flip.from,zone):null;
-      for(var k=0;k<2;k++)out+=flap(34+k*276,k?pad(t.m):pad(h),k?a:ink,previous?(k?pad(previous.m):pad(c.hour24?previous.h:previous.h%12||12)):undefined);
+      for(var k=0;k<2;k++)out+='<g data-clock-tile="'+(k?'minute':'hour')+'">'+flap(34+k*276,k?pad(t.m):pad(h),k?a:ink,previous?(k?pad(previous.m):pad(c.hour24?previous.h:previous.h%12||12)):undefined)+'</g>';
       if(c.seconds)out+=text(300,463,pad(t.s),26,a,'monospace');
     }
     function calendarPart(kind,content){return '<g data-calendar="'+kind+'">'+content+'</g>';}
@@ -244,34 +244,54 @@
     if(c.date)out+=calendarPart('date',dateArt);
     return '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 600 620" width="100%" height="100%" role="img" aria-label="'+esc(digital+(c.hour24?'':t.h<12?' AM':' PM'))+'">'+out+'</svg>';
   }
-  // A tiny per-surface player: normal ticks must not destroy an in-flight flap.
+  function draw(el,c,d,zone,flip,player,motion){
+    var html=scene(c,d,zone,flip,player.material);
+    if(root.GlassDOM)root.GlassDOM.patch(el,html,{clock:true,motion:motion});
+    else el.innerHTML=html; // Standalone renderer consumers without a browser DOM.
+  }
+  // Position/scale belong to the container, never to the artwork's lifetime.
+  function faceKey(c,zone){return [c.style,c.accent,c.seconds,c.day,c.date,c.hour24,zone||''].join('|');}
+  // One retained SVG and at most one animation loop per mounted clock.
   function mount(el,c,d,zone,previewFrom){
-    c=normalize(c);var key=JSON.stringify(c)+'|'+(zone||''),last=el._glassClock,win=typeof window==='undefined'?null:window;
+    c=normalize(c);var key=faceKey(c,zone),last=el._glassClock,win=typeof window==='undefined'?null:window;
     var reduced=win&&win.matchMedia&&win.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var hidden=win&&win.document&&win.document.hidden;
-    if(last&&last.frame&&(last.key!==key||reduced||hidden)){win.cancelAnimationFrame(last.frame);last.frame=null;}
+    if(last&&last.frame&&(last.key!==key||reduced||hidden)){win.cancelAnimationFrame(last.frame);last.frame=null;last.sample=null;}
     if((c.style==='tourbillon'||c.style==='folio')&&win&&win.requestAnimationFrame){
-      // Rebuild only when the minute/calendar/configuration changes, not each frame.
-      var dialKey=key+'|'+Math.floor(d.getTime()/60000);
+      // Reconcile minute/calendar text, preserving decoded artwork and running gears.
+      var dialKey=key+'|'+Math.floor(d.getTime()/(reduced&&c.seconds?1000:60000));
       if(!last||last.dialKey!==dialKey){
-        if(last&&last.frame)win.cancelAnimationFrame(last.frame);
-        el.innerHTML=scene(c,d,zone);last={key:key,date:d,frame:null,dialKey:dialKey,nodes:el.querySelectorAll(c.style==='folio'?'[data-folio], [data-folio-hand]':'[data-motion]')};el._glassClock=last;
+        if(!last||last.key!==key){
+          if(last&&last.frame)win.cancelAnimationFrame(last.frame);
+          last={key:key,date:d,frame:null,material:'movement-'+(++materialSerial)};el._glassClock=last;
+        }
+        draw(el,c,d,zone,null,last,!reduced&&c.seconds);last.dialKey=dialKey;
+        last.nodes=el.querySelectorAll(c.style==='folio'?'[data-folio], [data-folio-hand]':'[data-motion]');
+        last.hands=el.querySelectorAll('[data-clock-hand]');
       }
+      // Re-anchor on every tick: recover from suspension and wall-clock changes.
+      last.date=d;last.local=time(d,zone);last.anchor=win.performance&&win.performance.now?win.performance.now():last.frame&&last.stamp!==undefined?last.stamp:null;
       if(last.frame||reduced||hidden||!c.seconds)return;
-      var origin=d.getTime(),started=null,painted=-100,local=time(d,zone);
+      var started=null,painted=-100;
       function movement(stamp){
         last.frame=null;if(el._glassClock!==last||el.hidden||(win.document&&win.document.hidden))return;
+        last.stamp=stamp;
         if(started===null)started=stamp;
         if(stamp-painted>=33){
           // Bound the period to the barrel's eight-hour revolution for precision.
-          var seconds=((origin+stamp-started)/1000)%28800,state=c.style==='folio'?{}:movementState(seconds);
+          var delta=stamp-(last.anchor===null?started:last.anchor),local=last.local;
+          var seconds=((last.date.getTime()+delta)/1000)%28800,state=c.style==='folio'?{}:movementState(seconds);
           for(var ni=0;ni<last.nodes.length;ni++){var node=last.nodes[ni],kind=node.getAttribute(c.style==='folio'?'data-folio':'data-motion');
             if(c.style==='folio'&&node.getAttribute('data-folio-hand')){
-              var elapsed=local.s+(d.getMilliseconds()+stamp-started)/1000,which=node.getAttribute('data-folio-hand');
+              var elapsed=local.s+(last.date.getMilliseconds()+delta)/1000,which=node.getAttribute('data-folio-hand');
               var angle=which==='hour'?(local.h%12+local.m/60+elapsed/3600)*30:which==='minute'?(local.m+elapsed/60)*6:elapsed*6;
               node.setAttribute('transform','rotate('+(angle%360)+')');
             }else if(kind==='spring')node.setAttribute('d',hairspring(state.balance));
             else if(Object.prototype.hasOwnProperty.call(state,kind))node.setAttribute('transform','rotate('+(state[kind]%360)+')');
+          }
+          for(var hi=0;hi<last.hands.length;hi++){
+            var whichHand=last.hands[hi].getAttribute('data-clock-hand'),fraction=local.s+(last.date.getMilliseconds()+delta)/1000;
+            if(whichHand==='hour'||whichHand==='minute')last.hands[hi].setAttribute('transform','rotate('+((whichHand==='hour'?(local.h%12+local.m/60+fraction/3600)*30:(local.m+fraction/60)*6)%360)+' 300 300)');
           }
           painted=stamp;
         }
@@ -282,16 +302,20 @@
     if(last&&last.frame)return;
     var from=previewFrom||(last&&last.key===key&&d-last.date>0&&d-last.date<2500?last.date:null);
     var before=from&&time(from,zone),now=time(d,zone);
-    var next={key:key,date:d,frame:null};el._glassClock=next;
-    if(c.style!=='split'||!from||!before||(before.h===now.h&&before.m===now.m)||!win||!win.requestAnimationFrame||reduced||hidden){el.innerHTML=scene(c,d,zone);return;}
+    var next={key:key,date:d,frame:null,material:last&&last.key===key?last.material:'movement-'+(++materialSerial)};el._glassClock=next;
+    var sample=key+'|'+Math.floor(d.getTime()/(c.seconds?1000:60000));
+    next.sample=sample;
+    if(c.style!=='split'||!from||!before||(before.h===now.h&&before.m===now.m)||!win||!win.requestAnimationFrame||reduced||hidden){
+      if(!last||last.sample!==sample)draw(el,c,d,zone,null,next,false);return;
+    }
     var start=null;
-    el.innerHTML=scene(c,d,zone,{from:from,progress:0});
+    draw(el,c,d,zone,{from:from,progress:0},next,false);
     function frame(stamp){
       if(el._glassClock!==next)return;
       if(start===null)start=stamp;
       var p=Math.min(1,(stamp-start)/680);
       if(win.document&&win.document.hidden)p=1;
-      el.innerHTML=scene(c,d,zone,p<1?{from:from,progress:p}:null);
+      draw(el,c,d,zone,p<1?{from:from,progress:p}:null,next,false);
       next.frame=p<1?win.requestAnimationFrame(frame):null;
     }
     next.frame=win.requestAnimationFrame(frame);

@@ -1,11 +1,11 @@
 (function(){
-  var lastState=null,weatherMinute=-1,voiceState=null,wakeState=null;
+  var lastState=null,weatherMinute=-1,voiceState=null,wakeState=null,dom=window.GlassDOM;
   function navigationHints(){
     if(!window.GlassResearch)return;
     Array.prototype.forEach.call(document.querySelectorAll('[data-research-direction]'),function(el){
       var wake=wakeState;
       if(wake&&lastState&&wake.shortcutRevision!==lastState.revision){wake={enabled:wake.enabled,phase:wake.phase,shortcuts:[]};}
-      el.textContent=window.GlassResearch.navigationHint(el.getAttribute('data-research-direction'),voiceState,wake);
+      dom.text(el,window.GlassResearch.navigationHint(el.getAttribute('data-research-direction'),voiceState,wake));
     });
   }
   // The recovered Android image can default to UTC. Deployment may explicitly
@@ -21,12 +21,12 @@
   }
   function esc(s){return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function render(state){
-    lastState=state;document.body.className='mirror-display'+(state.panel==='weather'?' weather-open':state.panel==='research'?' research-open':state.panel==='playroom'?' playroom-open':state.panel==='studio'?' studio-open':'');
+    lastState=state;var bodyClass='mirror-display'+(state.panel==='weather'?' weather-open':state.panel==='research'?' research-open':state.panel==='playroom'?' playroom-open':state.panel==='studio'?' studio-open':'');
     var clockMode=['home','time'].indexOf(state.panel)!==-1&&!state.timers.length&&(!state.assistant||state.assistant.status==='execute');
-    document.getElementById('clock-art').hidden=!clockMode;if(clockMode)document.body.className+=' clock-open';
+    document.getElementById('clock-art').hidden=!clockMode;if(clockMode)bodyClass+=' clock-open';
     var html='';
-    if(state.panel==='workflows'){document.body.className='mirror-display workflow-open';html=window.GlassWorkflow.render(state,false);}
-    if(state.panel==='functions'){document.body.className='mirror-display function-open';html=window.GlassFunction.render(state,false);}
+    if(state.panel==='workflows'){bodyClass='mirror-display workflow-open';html=window.GlassWorkflow.render(state,false);}
+    if(state.panel==='functions'){bodyClass='mirror-display function-open';html=window.GlassFunction.render(state,false);}
     if(state.panel==='studio')html=window.GlassStudio.render(state,false);
     if(state.panel==='playroom')html=window.GlassPlayroom.render(state.playroom);
     if(state.panel==='research')html=window.GlassResearch.render(state.research,false);
@@ -37,17 +37,18 @@
     if(state.panel==='saved')html=state.recipes.slice(0,3).map(function(r){return '<article><span class="tag">CONFIGURATION ONLY · DATA NOT CONNECTED</span><h3>'+esc(r.title)+'</h3><p>'+esc(r.preferences)+'</p></article>';}).join('');
     if(state.panel==='saved')html=(state.weatherViews||[]).slice(0,3).map(function(v){return '<article><h3>'+esc(v.spec.title)+'</h3><p>'+esc(v.spec.range.replace(/_/g,' '))+' · '+esc(v.spec.focus)+' focus</p></article>';}).join('')+html;
     // Timers remain visible regardless of the requested panel.
-    html+=state.timers.map(function(t){return '<article><span class="tag">'+esc(t.label)+'</span><div class="countdown" data-end="'+t.endsAt+'"></div></article>';}).join('');
-    document.getElementById('panel').innerHTML=window.GlassSurface.card(state)+html+window.GlassWorkflow.strip(state)+window.GlassSurface.saveOffer(state);tick();navigationHints();window.GlassSurface.rendered(state);
+    html+=state.timers.map(function(t){return '<article data-render-key="timer:'+esc(t.id)+'"><span class="tag">'+esc(t.label)+'</span><div class="countdown" data-end="'+t.endsAt+'"></div></article>';}).join('');
+    dom.attr(document.body,'class',bodyClass);
+    dom.patch(document.getElementById('panel'),window.GlassSurface.card(state)+html+window.GlassWorkflow.strip(state)+window.GlassSurface.saveOffer(state),{scope:state.panel});tick();navigationHints();window.GlassSurface.rendered(state);
   }
   function tick(){
     navigationHints();
-    var d=new Date();document.getElementById('clock').textContent=d.toLocaleTimeString([],timeOptions);
+    var d=new Date();dom.text(document.getElementById('clock'),d.toLocaleTimeString([],timeOptions));
     var art=document.getElementById('clock-art');
     if(art&&!art.hidden&&lastState){var design=lastState.clockDesign||window.GlassClock.defaults(),g=window.GlassClock.geometry(design,window.innerWidth,window.innerHeight);art.style.left=g.left+'px';art.style.top=g.top+'px';art.style.width=g.size+'px';art.style.height=g.size+'px';window.GlassClock.mount(art,design,d,timeOptions.timeZone);}
-    document.getElementById('date').textContent=d.toLocaleDateString([],dateOptions);
-    if(lastState&&lastState.panel==='weather'&&weatherMinute!==Math.floor(Date.now()/60000)){weatherMinute=Math.floor(Date.now()/60000);var weather=document.getElementById('weather-content');if(weather)weather.innerHTML=window.GlassWeather.render(lastState.weather);}
-    Array.prototype.forEach.call(document.querySelectorAll('[data-end]'),function(el){var s=Math.max(0,Math.ceil((Number(el.getAttribute('data-end'))-Date.now())/1000));el.textContent=s?Math.floor(s/60)+':'+('0'+s%60).slice(-2):'Time’s up';});
+    dom.text(document.getElementById('date'),d.toLocaleDateString([],dateOptions));
+    if(lastState&&lastState.panel==='weather'&&weatherMinute!==Math.floor(Date.now()/60000)){weatherMinute=Math.floor(Date.now()/60000);var weather=document.getElementById('weather-content');if(weather)dom.patch(weather,window.GlassWeather.render(lastState.weather));}
+    Array.prototype.forEach.call(document.querySelectorAll('[data-end]'),function(el){var s=Math.max(0,Math.ceil((Number(el.getAttribute('data-end'))-Date.now())/1000));dom.text(el,s?Math.floor(s/60)+':'+('0'+s%60).slice(-2):'Time’s up');});
   }
   window.GlassSurface.subscribe({voice:function(state){
     voiceState=state;navigationHints();

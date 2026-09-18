@@ -24,13 +24,14 @@ test('shared ES5 page plans preserve every finding and agree across surfaces',()
   for(const dense of [false,true])for(const layout of ['briefing','agenda','comparison','steps']){
     const b=board(dense);b.spec.layout=layout;const plan=pages.plan(b);
     assert.deepEqual(JSON.parse(JSON.stringify(w.GlassResearchPages.plan(b))),plan);
-    assert.deepEqual(plan.flatMap(p=>p.cardNumbers),[1,2,3,4,5,6]);assert.equal(plan.length,dense?7:3);
+    assert.deepEqual(plan.flatMap(p=>p.cardNumbers),[1,2,3,4,5,6]);assert.equal(plan.length,layout==='agenda'?1:dense?7:3);
     assert.ok(plan.some(p=>p.summary));assert.ok(plan.some(p=>p.caveat));
     for(let page=0;page<plan.length;page++){
       b.page=page;const mirror=w.GlassResearch.render(b,false),remote=w.GlassResearch.render(b,true);
       for(let n=1;n<=6;n++){assert.equal(mirror.includes('Finding '+n),plan[page].cardNumbers.includes(n));assert.equal(remote.includes('Finding '+n),plan[page].cardNumbers.includes(n));}
       assert.equal(mirror.includes(b.caveat),plan[page].caveat);assert.equal(mirror.includes(b.summary),plan[page].summary);
-      assert.match(mirror,new RegExp((page+1)+' / '+plan.length));
+      if(plan.length>1)assert.match(mirror,new RegExp((page+1)+' / '+plan.length));
+      else {assert.doesNotMatch(mirror,/next page|previous page/);assert.doesNotMatch(remote,/data-research-page/);}
       if(dense&&page>0)assert.match(mirror,/Limitations on overview/);
     }
   }

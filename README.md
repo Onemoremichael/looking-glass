@@ -68,7 +68,10 @@ in-process background work, not restart-durable execution. See [voice lifecycle]
 - Shared $25 test allowance distinguishes reservations from usage estimates.
   Explicit dashboard-spend reconciliation preserves run history and unresolved
   holds; it never raises the approved limit. See [accounting](docs/API-TESTING.md).
-- Request capture and an example clarification flow for Gators sports.
+- A **Gators at home · next 2 weeks** attendance flow: all UF sports, home events
+  in Gainesville, Eastern-time schedules, venues and official schedule links.
+  Admission is marked unconfirmed rather than inferred.
+  Excludes past, away and neutral-site events; does not buy tickets.
 - Live, read-only web research assembled into cited briefing, agenda, comparison,
   or step-by-step boards. Two large cards per short page; dense results use an
   overview and individual finding pages, synchronized with agent context. Voice
@@ -253,6 +256,10 @@ Phone voice needs a separate transport/access implementation; Mirror audio uses
 the loopback-only native USB bridge, not the browser or a public audio endpoint.
 
 ## Architecture
+
+[Rendering continuity](docs/RENDERING.md): retained clock artwork and panel elements,
+targeted text/attribute updates, stable animation phases, and companion drafts that
+survive background state updates. No periodic full-panel or clock-face replacement.
 
 [Telemetry and traces](docs/TELEMETRY.md): local trace viewer at `/diagnostics`,
 `npm run traces` for reports, optional Langfuse-compatible OTLP export. Local transcript

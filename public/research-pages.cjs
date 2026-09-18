@@ -4,6 +4,9 @@
   function length(value){return String(value||'').replace(/\s+/g,' ').length;}
   function plan(board){
     var cards=board.cards||[],dense=length(board.spec.title)>50||length(board.summary)+length(board.caveat)>260,pages=[],i;
+    // An attendance agenda is a glanceable board, not a slideshow. Keep every
+    // event and the scope together, including when restoring an old page index.
+    if(board.spec.layout==='agenda')return [{kind:'agenda',cardNumbers:cards.map(function(c,n){return n+1;}),summary:true,caveat:true}];
     for(i=0;i<cards.length;i+=2){
       var pair=cards.slice(i,i+2).reduce(function(sum,c){return sum+length(c.heading)+length(c.kicker)+length(c.body)+length(c.detail);},0);
       if(pair>650)dense=true;

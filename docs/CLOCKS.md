@@ -116,11 +116,22 @@ The tooth counts and layout below are our own illustrative design, not a replica
 ## Verification
 
 Tourbillon's lightweight player updates eight mechanism transforms and one short
-hairspring path, capped at approximately 30 fps; the SVG dial is rebuilt only when the minute or design changes. Hidden
+hairspring path, capped at approximately 30 fps. The SVG dial, material IDs and decoded
+bezel/paper images are retained across minute/date changes; calendar text and other
+changed attributes are patched in place. Mechanical transforms are owned by the
+animation player and are never reset by an ordinary dial update. The hour/minute
+hands also move continuously. Position/scale changes affect the container only.
+Hidden
 surfaces stop the animation. Turning Seconds off or enabling reduced motion keeps
 the mechanism still. The photoreal bezel is a static local asset; movement does not
 call a model. Metal gradients, recessed plates, offset shadows and ruby bearings
 provide depth without expensive blur filters. Gradient IDs are unique per SVG.
+
+Other faces update changed text/attributes at second (or minute) boundaries rather
+than replacing SVG trees every 500 ms. Split retains its outer SVG, calendar and
+unchanged tile through the entire flip. Clock Studio does not redraw its eight
+thumbnails on drag/scale changes or unrelated state broadcasts. See
+[rendering continuity](RENDERING.md) for the shared display/companion contract.
 
 Sixteen clock-specific tests cover all eight renderers, split-flap transitions/player lifecycle,
 Folio's circular paper clipping, local engraving, hand updates and pause behavior,

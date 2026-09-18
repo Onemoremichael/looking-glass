@@ -1,5 +1,5 @@
 (function(){
-  var art=window.GlassClock,c=art.defaults(),version=0,saved=0,busy=false,timer=null,drag=null;
+  var art=window.GlassClock,c=art.defaults(),version=0,saved=0,busy=false,timer=null,drag=null,galleryKey=null;
   var stage=document.getElementById('clock-stage'),preview=document.getElementById('clock-preview-art'),status=document.getElementById('clock-status');
   var gallery=document.getElementById('clock-gallery'),accents=document.getElementById('clock-accent');
   gallery.innerHTML=art.styles.map(function(s){return '<button class="clock-choice" data-style="'+s.id+'" aria-pressed="false"><span class="mini" aria-hidden="true"></span><strong>'+s.name+'</strong><small>'+s.kind+'</small></button>';}).join('');
@@ -11,7 +11,13 @@
   function controls(){
     ['scale','x','y'].forEach(function(k){document.getElementById('clock-'+k).value=c[k];document.getElementById('clock-'+k+'-value').textContent=c[k]+'%';});
     ['seconds','day','date','hour24'].forEach(function(k){document.getElementById('clock-'+k).checked=c[k];});
-    Array.prototype.forEach.call(gallery.querySelectorAll('button'),function(b){var selected=b.getAttribute('data-style')===c.style;b.setAttribute('aria-pressed',String(selected));var sample=clone(c);sample.style=b.getAttribute('data-style');b.querySelector('.mini').innerHTML=art.scene(sample,new Date(2026,0,1,10,8,36));});
+    var sampleKey=[c.accent,c.seconds,c.day,c.date,c.hour24].join('|');
+    Array.prototype.forEach.call(gallery.querySelectorAll('button'),function(b){var selected=b.getAttribute('data-style')===c.style;window.GlassDOM.attr(b,'aria-pressed',String(selected));
+      if(sampleKey!==galleryKey){var sample=clone(c);sample.style=b.getAttribute('data-style');
+        // Static thumbnails never run eight simultaneous mechanical players.
+        var mini=b.querySelector('.mini');if(!mini._material)mini._material='gallery-'+b.getAttribute('data-style');
+        window.GlassDOM.patch(mini,art.scene(sample,new Date(2026,0,1,10,8,36),undefined,null,mini._material));}
+    });galleryKey=sampleKey;
     Array.prototype.forEach.call(accents.querySelectorAll('button'),function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-accent')===c.accent));});
     document.getElementById('clock-description').textContent=art.styles.filter(function(s){return s.id===c.style;})[0].description;document.getElementById('clock-flip-preview').hidden=c.style!=='split';paint();
   }
@@ -37,6 +43,6 @@
     c.y=Math.max(0,Math.min(100,Math.round(drag.cy+(p.clientY-drag.y)/Math.max(1,stage.clientHeight-g.size)*100)));changed();e.preventDefault();}
   stage.addEventListener('mousedown',begin);stage.addEventListener('touchstart',begin,{passive:false});window.addEventListener('mousemove',move);window.addEventListener('touchmove',move,{passive:false});window.addEventListener('mouseup',function(){drag=null;});window.addEventListener('touchend',function(){drag=null;});window.addEventListener('touchcancel',function(){drag=null;});
   stage.onkeydown=function(e){var delta=e.shiftKey?10:2;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].indexOf(e.key)===-1)return;e.preventDefault();if(e.key==='ArrowLeft')c.x=Math.max(0,c.x-delta);if(e.key==='ArrowRight')c.x=Math.min(100,c.x+delta);if(e.key==='ArrowUp')c.y=Math.max(0,c.y-delta);if(e.key==='ArrowDown')c.y=Math.min(100,c.y+delta);changed();};
-  window.GlassSurface.subscribe({voice:function(){},state:function(s){if(!busy&&!timer&&version===saved){c=clone(art.normalize(s.clockDesign));controls();status.textContent='Connected · changes save automatically';}},error:function(){status.textContent='Connection lost · preview changes may not save';}});
+  window.GlassSurface.subscribe({voice:function(){},state:function(s){if(!busy&&!timer&&version===saved){var next=clone(art.normalize(s.clockDesign));if(JSON.stringify(c)!==JSON.stringify(next)){c=next;controls();}status.textContent='Connected · changes save automatically';}},error:function(){status.textContent='Connection lost · preview changes may not save';}});
   controls();setInterval(paint,1000);window.addEventListener('resize',paint);
 }());

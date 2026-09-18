@@ -6,8 +6,8 @@ const list=(items,maxItems)=>({type:'array',items,maxItems});
 export const researchSpecSchema=obj({title:str(70),query:str(700),layout:{enum:['briefing','agenda','comparison','steps']}});
 export const researchBoardSchema=obj({
   spec:researchSpecSchema,summary:str(300),caveat:{type:'string',minLength:0,maxLength:300},
-  cards:list(obj({heading:str(80),kicker:{type:'string',minLength:0,maxLength:60},body:str(350),detail:{type:'string',minLength:0,maxLength:100},sourceIds:list(str(30),4)}),6),
-  sources:list(obj({id:str(30),title:str(100),url:str(1000)}),8),
+  cards:list(obj({heading:str(80),kicker:{type:'string',minLength:0,maxLength:60},body:str(350),detail:{type:'string',minLength:0,maxLength:100},sourceIds:list(str(30),4)}),32),
+  sources:list(obj({id:str(30),title:str(100),url:str(1000)}),20),
 });
 // First-pass URL validation; host retrieval also requires pinned public DNS and bounded redirects.
 export function publicSource(value){
@@ -26,7 +26,8 @@ export function validateResearchSpec(spec){
 }
 export function validateResearchBoard(board,{openedUrls}={}){
   validateResearchSpec(board?.spec);
-  if(!Array.isArray(board.cards)||!board.cards.length||board.cards.length>6||!Array.isArray(board.sources)||!board.sources.length||board.sources.length>8)throw Error('Research requires cards and sources');
+  const agenda=board.spec.layout==='agenda';
+  if(!Array.isArray(board.cards)||!board.cards.length||board.cards.length>(agenda?32:6)||!Array.isArray(board.sources)||!board.sources.length||board.sources.length>(agenda?20:8))throw Error('Research requires cards and sources');
   const ids=new Set();
   for(const s of board.sources){
     if(ids.has(s.id)||!publicSource(s.url))throw Error('Invalid research source');

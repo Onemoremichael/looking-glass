@@ -7,7 +7,10 @@ tools. The existing planner still handles local tasks without needing a search.
 ## Outcome-first presentation
 
 The agent chooses `briefing`, `agenda`, `comparison` or `steps`, then assembles up
-to six sourced cards. Short boards show two numbered findings per page. Dense
+to six sourced cards, or up to 32 compact agenda events. **Agendas show all events
+on one page**, with no next/previous interaction on either surface. Prefer concise
+single-page outcomes; pagination remains a fallback for dense non-agenda research.
+Short non-agenda boards show two numbered findings per page. Dense
 boards show an overview (summary and limitations), then one finding per page.
 The shared ES5 page planner keeps the mirror, companion, agent-visible card
 numbers and navigation in agreement. Nothing is truncated to fit. Say **next page**
@@ -28,11 +31,52 @@ Every card cites a known source
 ID. This proves the source was opened, not that every sentence is true: relevance and faithful
 summarization still require model evaluation. Private/local URLs and executable
 markup are rejected or escaped. Web pages remain untrusted data, never instructions.
-At most ten completed search/open calls and a 90-second total planning deadline
-bound a research turn. Existing budget reservations and cleanup still apply; the
+At most ten completed search/open calls per ordinary turn, or 24 for an explicit
+background research workflow step, and a 90-second total planning deadline
+bound research. The planner is told its lookup budget; reaching the cap blocks
+with an actionable explanation rather than publishing an unchecked partial result.
+Existing budget reservations and cleanup still apply; the
 allowance is conservative accounting, not a provider billing hard limit.
 
 ## Reuse
+
+### Gainesville attendance shortcut
+
+The companion's **Gators at home · next 2 weeks** control starts a real, saved
+research workflow (not the old configuration-only Gators demo). It covers all
+UF sports with officially designated home events in Gainesville, Florida, from
+now through the next 14 days, using Eastern time. Past, away, and neutral-site
+events are excluded. The old football/TV-only demo preference is not reused.
+Each chronological card emphasizes sport/opponent, date/time and venue;
+official schedule links remain companion-only.
+Unconfirmed admission is labelled, not inferred to be free or available. The
+view keeps all qualifying events together and reports empty results
+honestly. Orange-accented blue/cream agenda cards provide contrast on the mirror.
+The workflow and research configuration save; facts still require fresh retrieval.
+No ticket purchases, reservations, or background schedule monitoring are performed.
+
+This exact shortcut now uses `gators-schedule.mjs`, not free-form inference, for
+event selection. It retrieves all 17 official sport schedule tables (including
+combined cross-country/track programs), at most three concurrently, using the
+same public-DNS, redirect and 512 KiB limits as source verification. A 30-second
+overall deadline applies. The parser requires complete recognized tables and
+filters explicit Home + Gainesville rows against a rolling 14-day Eastern-time
+window. Completed/cancelled events are excluded. Unknown-time events today are
+omitted conservatively; future TBD times remain marked. Unsupported multi-day or
+unlocated rows and failed schedules produce a coverage caveat. All-source failure
+blocks rather than falsely declaring no events. Admission is **not confirmed**;
+the schedule links are for checking details, not verified ticket inventory.
+This corrects a live model result that omitted football and included out-of-range
+October events. The deterministic shortcut still uses the shared validated board,
+saved workflow, pagination, and completion-receipt infrastructure.
+Agenda rendering now uses one all-events page on both surfaces, with compact
+ticket rows. The old six-event truncation is removed; more than 32 events blocks
+with a request to narrow the range rather than silently dropping matches.
+
+Fresh workflow research receives the current task, clock/time zone and earlier
+step evidence, not unrelated cached boards or ambient chat history. This prevents
+an old empty date range from anchoring a newly scoped attendance search. Coverage
+may still be incomplete and must be disclosed rather than called exhaustive.
 
 The generic repertoire retains `{title, query, layout}` with `kind: research`.
 Facts are separately cached in up to twelve timestamped boards. Fresh cached
