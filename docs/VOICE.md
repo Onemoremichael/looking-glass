@@ -5,8 +5,10 @@
 Choose Mac browser audio or the native USB Mirror audio bridge while the Mac hosts
 application logic. See [Mirror setup and validation](MIRROR-AUDIO.md).
 Audio remains separate from rendering.
-Android 6.0.1 is the current baseline; Android 7 is a possible later mirror-mirror
-investigation, not a prerequisite. Native audio requires an Afterglow APK update
+Android 6.0.1 is the current baseline. Original-board Android recovery is maintained
+in [lulu-mirror-software-only](https://github.com/Onemoremichael/lulu-mirror-software-only);
+an Android 7 upgrade remains an unverified platform investigation, not a prerequisite.
+Native audio requires an Afterglow APK update
 and microphone permission, but no firmware changes.
 
 The mirror is output-only: clock, selected content, persistent timers and shared

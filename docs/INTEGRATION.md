@@ -45,7 +45,10 @@ Recipes currently use the fixed agenda component with configuration only. A futu
 validated component registry will support agent-selected layouts, not arbitrary HTML
 or scripts. sourceStatus is not_connected until a real adapter is implemented.
 
-Port 8780 is independent of mirror-mirror Android remote 8765 and clock lab 8766.
+Port 8780 is independent of the Android remote (default 8765) and the historical
+mirror-mirror clock lab (8766). Maintained Android recovery and non-touch control
+now live in [lulu-mirror-software-only](https://github.com/Onemoremichael/lulu-mirror-software-only);
+the Afterglow display/audio wrapper remains in mirror-mirror.
 The server makes no ADB calls or device modifications. Timers are local application data, not Codex
 automations or operating-system alarms.
 

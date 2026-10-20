@@ -269,5 +269,10 @@ is off and would contain metadata only. Automated tests use no paid API calls.
 [Plan](docs/PLAN.md) · [Protocol and boundaries](docs/INTEGRATION.md)
 
 Looking Glass owns application UI, capability recipes, task orchestration and
-AI integration. [mirror-mirror](https://github.com/Onemoremichael/mirror-mirror)
-owns device recovery, drivers and Android controls. No device changes in this pass.
+AI integration. [lulu-mirror-software-only](https://github.com/Onemoremichael/lulu-mirror-software-only)
+owns the maintained original-board Android recovery workflow, hardware
+compatibility build inputs and non-touch Android controls.
+[mirror-mirror](https://github.com/Onemoremichael/mirror-mirror) retains historical
+hardware research, camera experiments and the optional Afterglow Android wrapper
+used by this app's display/audio bridge. Installing or developing Looking Glass
+does not require reflashing a working Android installation.
